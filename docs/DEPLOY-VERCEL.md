@@ -4,6 +4,8 @@ Repo: [captain-jack-sparrow909/DevPulse-AI](https://github.com/captain-jack-spar
 
 The Next.js app lives in **`apps/web`**. Point Vercel at that folder.
 
+**Scheduling:** We do **not** use Vercel’s built-in Cron (Hobby only allows once/day, which makes posts stale). Use a **free external cron** every ~15 minutes instead.
+
 ---
 
 ## 1. Import the project
@@ -16,136 +18,146 @@ The Next.js app lives in **`apps/web`**. Point Vercel at that folder.
 |--------|--------|
 | **Root Directory** | `apps/web` |
 | **Framework Preset** | Next.js |
-| **Build Command** | `prisma generate && next build` (or leave default from `vercel.json`) |
+| **Build Command** | `prisma generate && next build` (from `vercel.json`) |
 | **Install Command** | `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install` |
 | **Output Directory** | *(default — leave empty)* |
 | **Node.js** | 20.x |
 
-`apps/web/vercel.json` already sets install/build commands and a **cron** every 15 minutes.
+There is **no `crons` array** in `vercel.json` (on purpose — avoids Hobby deploy failures).
 
 ---
 
 ## 2. Environment variables
 
-In **Project → Settings → Environment Variables**, add these for **Production** (and Preview if you want):
+In **Project → Settings → Environment Variables**, add for **Production**:
 
 ### Required
 
 | Name | Notes |
 |------|--------|
 | `DATABASE_URL` | Supabase **pooler** `:6543` with `?pgbouncer=true&connection_limit=5&sslmode=require` |
-| `DIRECT_URL` | Supabase **direct** `:5432` with `?sslmode=require` (for Prisma generate / tooling) |
+| `DIRECT_URL` | Supabase **direct** `:5432` with `?sslmode=require` |
 | `BETTER_AUTH_SECRET` | Long random string (≥32 chars) |
 | `BETTER_AUTH_URL` | Your production URL, e.g. `https://devpulse-ai.vercel.app` |
 | `NEXT_PUBLIC_APP_URL` | **Same** as `BETTER_AUTH_URL` |
-| `CRON_SECRET` | Random secret; Vercel Cron + manual curls use `Authorization: Bearer …` |
+| `CRON_SECRET` | Random secret for external cron `Authorization: Bearer …` |
 | `DEEPSEEK_API_KEY` | Writing / scoring |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | `deepseek-chat` |
 
 ### Strongly recommended (research)
 
-| Name |
-|------|
-| `GITHUB_TOKEN` |
-| `HF_TOKEN` |
-| `DEVTO_API_KEY` |
-| `STACKEXCHANGE_KEY` |
-| `PRODUCTHUNT_TOKEN` |
-| `TAVILY_API_KEY` |
-| `X_BEARER_TOKEN` |
+`GITHUB_TOKEN`, `HF_TOKEN`, `DEVTO_API_KEY`, `STACKEXCHANGE_KEY`, `PRODUCTHUNT_TOKEN`, `TAVILY_API_KEY`, `X_BEARER_TOKEN`
 
-Copy values from your local `apps/web/.env` (never commit that file).
+Copy from local `apps/web/.env` (never commit that file).
 
 ### After first deploy
 
-1. Note the production URL (e.g. `https://devpulse-ai-xxx.vercel.app`)
-2. Update `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` to that URL
-3. **Redeploy** so auth cookies / redirects work
-
-Optional: add a custom domain and set those two vars to `https://yourdomain.com`.
+1. Copy production URL (e.g. `https://devpulse-ai-xxx.vercel.app`)
+2. Set `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` to that URL
+3. **Redeploy**
 
 ---
 
 ## 3. Deploy
 
-Click **Deploy**. First build runs `prisma generate` + `next build`.
+Click **Deploy**. Build runs `prisma generate` + `next build`.
 
-If build fails on Prisma:
-
-- Confirm `DATABASE_URL` / `DIRECT_URL` are set
-- Locally: `cd apps/web && npx prisma db push` against Supabase (schema should already be there)
+If Prisma fails: confirm `DATABASE_URL` / `DIRECT_URL`, and that you already ran `npx prisma db push` against Supabase locally.
 
 ---
 
-## 4. Cron (auto-generate slots)
+## 4. External cron (required for fresh slots)
 
-### Vercel Hobby limit (this often blocks deploy)
+Endpoint each tick:
 
-On the **Hobby (free)** plan, Vercel Cron may run **at most once per day**.  
-A schedule like `*/15 * * * *` **fails deployment** with an error about daily cron limits.
-
-`vercel.json` on Hobby-safe default:
-
-```text
-0 6 * * *  →  GET /api/cron/slot   (once daily at 06:00 UTC)
+```http
+GET https://YOUR-APP.vercel.app/api/cron/slot
+Authorization: Bearer YOUR_CRON_SECRET
 ```
 
-That one daily run still:
-1. Cleans posts/research older than 30 days  
-2. Tries screenshot cleanup  
-3. Promotes due approved posts  
-4. Generates at most one dual pack if a slot is due  
-5. Touches the DB (helps keep Supabase awake)
+Each call:
+1. Deletes posts/research older than **30 days**
+2. Screenshot cleanup (no-op on serverless disk)
+3. Promotes due approved posts → `ready`
+4. Generates **at most one** dual pack (LinkedIn + X) for the next due empty slot
+5. Touches Supabase so free DB stays active
 
-### For 12 slots / day on free tier (recommended)
+### Option A — cron-job.org (free, recommended)
 
-Use a **free external cron** (no Vercel Pro needed), e.g. [cron-job.org](https://cron-job.org) or [EasyCron](https://www.easycron.com):
+1. Sign up at [https://cron-job.org](https://cron-job.org)
+2. **Create cronjob**
+3. Settings:
 
 | Field | Value |
 |-------|--------|
+| Title | `DevPulse slot cron` |
 | URL | `https://YOUR-APP.vercel.app/api/cron/slot` |
-| Schedule | Every 15 minutes |
-| Method | GET |
-| Header | `Authorization: Bearer YOUR_CRON_SECRET` |
+| Schedule | Every **15 minutes** (or every 10–20 min) |
+| Request method | **GET** |
+| Headers | `Authorization` = `Bearer YOUR_CRON_SECRET` (same as Vercel env) |
+| Enable job | On |
 
-Same endpoint, more frequent. Vercel’s own cron stays daily (Hobby-safe); external cron does the 15‑minute work.
+4. Save → **Run now** once to test  
+5. Expect JSON: `{ "ok": true, "created": 0 or 1, ... }`
 
-### Pro plan
+Optional: also set query fallback  
+`https://YOUR-APP.vercel.app/api/cron/slot?secret=YOUR_CRON_SECRET`  
+(if the service makes custom headers awkward).
 
-On **Vercel Pro**, you can change the schedule back to `*/15 * * * *` in `vercel.json`.
+### Option B — EasyCron / cron-job.net / GitHub Actions
+
+Any HTTP GET scheduler works. Same URL + Bearer header.
+
+### Option C — GitHub Actions (free minutes)
+
+Create `.github/workflows/devpulse-cron.yml` on a schedule if you prefer GitHub’s timer:
+
+```yaml
+name: DevPulse slot cron
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # UTC
+  workflow_dispatch:
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit cron endpoint
+        run: |
+          curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.CRON_BASE_URL }}/api/cron/slot"
+```
+
+Add repo secrets: `CRON_SECRET`, `CRON_BASE_URL` (`https://your-app.vercel.app`).
+
+### Local always-on (while developing)
+
+```bash
+cd apps/web
+npm run dev          # terminal 1
+npm run cron:loop    # terminal 2 — every 15 min
+```
 
 ---
 
 ## 5. Known free-tier limits
 
-| Topic | Behavior on Vercel Hobby |
-|-------|---------------------------|
-| **Serverless timeout** | `maxDuration` set to **60s**. Full research + DeepSeek may approach the limit; if cron times out, run **Generate** from the UI or upgrade for longer timeouts. |
-| **Playwright screenshots** | **Disabled** on Vercel (`VERCEL=1`). Capture still works in local `npm run dev`. |
-| **Ephemeral disk** | Screenshot files do not persist across deploys; R2 later if you want cloud images. |
-| **Supabase pause** | Cron every 15 min keeps the DB active. |
+| Topic | Behavior |
+|-------|----------|
+| **Vercel Cron** | Not used (Hobby = max 1/day → stale data) |
+| **External cron** | Free; drives fresh research all day |
+| **Serverless timeout** | Hobby max **60s** for the route — heavy runs may timeout; retry next tick or Generate in UI |
+| **Playwright** | Disabled on Vercel; works locally |
+| **Supabase pause** | External cron traffic keeps the project active |
 
 ---
 
 ## 6. Post-deploy checklist
 
-- [ ] Open `/register` and create your account (fresh Supabase user if DB was empty)
-- [ ] Open `/research` → **Refresh research now**
-- [ ] Open `/generate` → generate or wait for cron
-- [ ] Confirm cron logs: **Project → Logs** or **Cron Jobs**
-- [ ] Auth works with production URL (sign in / cookies)
-
----
-
-## CLI alternative
-
-```bash
-cd apps/web
-npx vercel login
-npx vercel link          # link to the GitHub project
-npx vercel env pull      # optional
-npx vercel --prod
-```
-
-When linking, set root directory to `apps/web` if prompted.
+- [ ] Deploy succeeds (no cron config error)
+- [ ] `BETTER_AUTH_URL` / `NEXT_PUBLIC_APP_URL` = production URL
+- [ ] `/register` works
+- [ ] External cron **Run now** returns `ok: true`
+- [ ] After a due slot, a pack appears under **Posts**
+- [ ] Approve → stays in Supabase

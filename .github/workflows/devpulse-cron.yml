@@ -1,0 +1,33 @@
+# Free external scheduler alternative (GitHub Actions).
+# Enable only if you prefer GH Actions over cron-job.org.
+#
+# Repo secrets required:
+#   CRON_SECRET   — same as Vercel CRON_SECRET
+#   CRON_BASE_URL — https://your-app.vercel.app  (no trailing slash)
+
+name: DevPulse slot cron
+
+on:
+  schedule:
+    # Every 15 minutes (UTC). Fresh research per due slot.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Call production cron endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_BASE_URL: ${{ secrets.CRON_BASE_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ] || [ -z "$CRON_BASE_URL" ]; then
+            echo "Missing secrets CRON_SECRET or CRON_BASE_URL — skip."
+            exit 0
+          fi
+          curl -fsS -X GET \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Accept: application/json" \
+            "${CRON_BASE_URL}/api/cron/slot"

@@ -3,12 +3,6 @@
   "installCommand": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install",
   "buildCommand": "prisma generate && next build",
   "regions": ["sin1"],
-  "crons": [
-    {
-      "path": "/api/cron/slot",
-      "schedule": "0 6 * * *"
-    }
-  ],
   "functions": {
     "src/app/api/cron/slot/route.ts": {
       "maxDuration": 60

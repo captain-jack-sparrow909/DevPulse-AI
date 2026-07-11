@@ -124,10 +124,10 @@ cd apps/web && npm run cron:once
 
 Each tick: **cleanup** (posts/research &gt; 30 days, screenshots &gt; 1 day) → **promote due slots** → **generate if a slot is due**. Approving a post only flips status — the row is already in Supabase when generated.
 
-**Vercel Hobby:** built-in Cron is limited to **once per day** (`0 6 * * *` in `vercel.json`).  
-`*/15 * * * *` will **fail the deploy** on free tier. For 15‑minute slots, use a free external cron  
-(e.g. cron-job.org) hitting `/api/cron/slot` with `Authorization: Bearer $CRON_SECRET`.  
-See [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
+**Scheduling:** Vercel built-in Cron is **not used** (Hobby = once/day → stale data; frequent schedules break deploys).  
+Use a free external cron (cron-job.org or GitHub Actions) every **15 minutes** →  
+`GET /api/cron/slot` + header `Authorization: Bearer $CRON_SECRET`.  
+Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 
 **Supabase free tier:** use `DATABASE_URL` + `DIRECT_URL`. Optional UI flag **Allow early** can draft the next unfilled slot before its clock time.
 
