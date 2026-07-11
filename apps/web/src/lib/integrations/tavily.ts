@@ -1,4 +1,5 @@
 import type { RawSourceItem } from "./types";
+import { researchFetch } from "./fetch";
 
 interface TavilyResult {
   title?: string;
@@ -26,7 +27,7 @@ export async function fetchTavily(limit = 8): Promise<RawSourceItem[]> {
   await Promise.all(
     queries.map(async (query, qi) => {
       try {
-        const res = await fetch("https://api.tavily.com/search", {
+        const res = await researchFetch("https://api.tavily.com/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -36,7 +37,7 @@ export async function fetchTavily(limit = 8): Promise<RawSourceItem[]> {
             search_depth: "basic",
             include_answer: false,
           }),
-          signal: AbortSignal.timeout(15_000),
+          timeoutMs: 15_000,
         });
         if (!res.ok) return;
         const data = (await res.json()) as { results?: TavilyResult[] };

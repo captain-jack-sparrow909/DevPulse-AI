@@ -1,4 +1,5 @@
 import type { RawSourceItem } from "./types";
+import { researchFetch } from "./fetch";
 
 /**
  * X (Twitter) research-only — never posts.
@@ -20,15 +21,14 @@ export async function fetchXResearch(limit = 10): Promise<RawSourceItem[]> {
   );
 
   try {
-    const res = await fetch(
+    const res = await researchFetch(
       `https://api.twitter.com/2/tweets/search/recent?query=${query}&max_results=${maxResults}&tweet.fields=public_metrics,created_at`,
       {
         headers: {
           Authorization: `Bearer ${bearer}`,
           "User-Agent": "DevPulse-AI-Research/1.0",
         },
-        next: { revalidate: 900 },
-        signal: AbortSignal.timeout(12_000),
+        timeoutMs: 12_000,
       },
     );
 

@@ -1,4 +1,5 @@
 import type { RawSourceItem } from "./types";
+import { researchFetch } from "./fetch";
 
 interface SoItem {
   question_id: number;
@@ -40,11 +41,13 @@ export async function fetchStackOverflow(limit = 10): Promise<RawSourceItem[]> {
         });
         if (key) params.set("key", key);
 
-        const res = await fetch(`https://api.stackexchange.com/2.3/questions?${params}`, {
-          headers: { "User-Agent": "DevPulse-AI/1.0" },
-          next: { revalidate: 900 },
-          signal: AbortSignal.timeout(12_000),
-        });
+        const res = await researchFetch(
+          `https://api.stackexchange.com/2.3/questions?${params}`,
+          {
+            headers: { "User-Agent": "DevPulse-AI/1.0" },
+            timeoutMs: 12_000,
+          },
+        );
         if (!res.ok) return;
         const data = (await res.json()) as { items?: SoItem[] };
         for (const q of data.items ?? []) {

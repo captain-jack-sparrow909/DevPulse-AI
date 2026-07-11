@@ -41,7 +41,7 @@ export const RSS_FEEDS: RssFeed[] = [
   { name: "GitHub Blog", url: "https://github.blog/feed/", category: "engineering", priority: 4 },
   { name: "AWS Architecture", url: "https://aws.amazon.com/blogs/architecture/feed/", category: "engineering", priority: 4 },
   { name: "Kubernetes Blog", url: "https://kubernetes.io/feed.xml", category: "engineering", priority: 4 },
-  { name: "Vercel Blog", url: "https://vercel.com/atom", category: "engineering", priority: 4 },
+  // Avoid https://vercel.com/atom — full feed is multi‑MB and breaks Next cache limits
 
   // Tech news (use sparingly — lower priority) ⭐⭐⭐⭐
   { name: "TechCrunch AI", url: "https://techcrunch.com/category/artificial-intelligence/feed/", category: "tech_news", priority: 3 },

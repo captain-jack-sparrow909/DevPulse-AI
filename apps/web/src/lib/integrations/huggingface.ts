@@ -1,4 +1,5 @@
 import type { RawSourceItem } from "./types";
+import { researchFetch } from "./fetch";
 
 interface HfModel {
   id: string;
@@ -22,9 +23,9 @@ export async function fetchHuggingFace(limit = 12): Promise<RawSourceItem[]> {
     const token = process.env.HF_TOKEN?.trim();
     if (token) headers.Authorization = `Bearer ${token}`;
 
-    const res = await fetch(
+    const res = await researchFetch(
       `https://huggingface.co/api/models?sort=likes&direction=-1&limit=${limit}&filter=text-generation`,
-      { headers, next: { revalidate: 900 }, signal: AbortSignal.timeout(15_000) },
+      { headers, timeoutMs: 15_000 },
     );
     if (!res.ok) return [];
     const models = (await res.json()) as HfModel[];

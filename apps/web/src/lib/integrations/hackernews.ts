@@ -1,4 +1,5 @@
 import type { RawSourceItem } from "./types";
+import { researchFetch } from "./fetch";
 
 interface HnItem {
   id: number;
@@ -11,8 +12,8 @@ interface HnItem {
 
 export async function fetchHackerNews(limit = 20): Promise<RawSourceItem[]> {
   try {
-    const res = await fetch("https://hacker-news.firebaseio.com/v0/topstories.json", {
-      next: { revalidate: 300 },
+    const res = await researchFetch("https://hacker-news.firebaseio.com/v0/topstories.json", {
+      timeoutMs: 10_000,
     });
     if (!res.ok) return [];
     const ids = (await res.json()) as number[];
@@ -21,9 +22,10 @@ export async function fetchHackerNews(limit = 20): Promise<RawSourceItem[]> {
     const items = await Promise.all(
       top.map(async (id) => {
         try {
-          const itemRes = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`, {
-            next: { revalidate: 300 },
-          });
+          const itemRes = await researchFetch(
+            `https://hacker-news.firebaseio.com/v0/item/${id}.json`,
+            { timeoutMs: 8_000 },
+          );
           if (!itemRes.ok) return null;
           return (await itemRes.json()) as HnItem;
         } catch {

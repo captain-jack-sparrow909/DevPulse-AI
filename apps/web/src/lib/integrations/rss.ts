@@ -1,5 +1,6 @@
 import type { RawSourceItem } from "./types";
 import { RSS_FEEDS, type RssFeed } from "./catalog";
+import { researchFetch } from "./fetch";
 
 function decodeXml(s: string): string {
   return s
@@ -64,16 +65,19 @@ function parseFeedXml(xml: string, feed: RssFeed, limit: number): RawSourceItem[
 
 async function fetchOneFeed(feed: RssFeed, limit: number): Promise<RawSourceItem[]> {
   try {
-    const res = await fetch(feed.url, {
+    const res = await researchFetch(feed.url, {
       headers: {
         "User-Agent": "DevPulse-AI/1.0 (research RSS reader)",
         Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
       },
-      next: { revalidate: 900 },
-      signal: AbortSignal.timeout(12_000),
+      timeoutMs: 12_000,
     });
     if (!res.ok) return [];
-    const xml = await res.text();
+    // Cap body size — huge atom feeds (multi‑MB) are truncated for parsing
+    const buf = await res.arrayBuffer();
+    const maxBytes = 1_500_000; // under Next 2MB data-cache limit; we use no-store anyway
+    const slice = buf.byteLength > maxBytes ? buf.slice(0, maxBytes) : buf;
+    const xml = new TextDecoder("utf-8", { fatal: false }).decode(slice);
     return parseFeedXml(xml, feed, limit);
   } catch {
     return [];

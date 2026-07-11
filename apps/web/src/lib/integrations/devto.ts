@@ -1,4 +1,5 @@
 import type { RawSourceItem } from "./types";
+import { researchFetch } from "./fetch";
 
 interface DevToArticle {
   id: number;
@@ -30,9 +31,9 @@ export async function fetchDevTo(limit = 12): Promise<RawSourceItem[]> {
     await Promise.all(
       tags.map(async (tag) => {
         try {
-          const res = await fetch(
+          const res = await researchFetch(
             `https://dev.to/api/articles?tag=${tag}&top=7&per_page=${Math.ceil(limit / tags.length)}`,
-            { headers, next: { revalidate: 900 }, signal: AbortSignal.timeout(12_000) },
+            { headers, timeoutMs: 12_000 },
           );
           if (!res.ok) return;
           const articles = (await res.json()) as DevToArticle[];

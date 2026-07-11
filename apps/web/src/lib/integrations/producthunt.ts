@@ -1,4 +1,5 @@
 import type { RawSourceItem } from "./types";
+import { researchFetch } from "./fetch";
 
 /**
  * Product Hunt — optional PRODUCTHUNT_TOKEN (Developer Token / GraphQL).
@@ -26,7 +27,7 @@ export async function fetchProductHunt(limit = 8): Promise<RawSourceItem[]> {
         }
       }
     `;
-    const res = await fetch("https://api.producthunt.com/v2/api/graphql", {
+    const res = await researchFetch("https://api.producthunt.com/v2/api/graphql", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -34,7 +35,7 @@ export async function fetchProductHunt(limit = 8): Promise<RawSourceItem[]> {
         "User-Agent": "DevPulse-AI/1.0",
       },
       body: JSON.stringify({ query }),
-      next: { revalidate: 1800 },
+      timeoutMs: 15_000,
     });
     if (!res.ok) return [];
     const json = (await res.json()) as {

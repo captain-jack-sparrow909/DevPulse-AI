@@ -1,4 +1,5 @@
 import type { RawSourceItem } from "./types";
+import { researchFetch } from "./fetch";
 
 interface GhRepo {
   name: string;
@@ -38,12 +39,11 @@ export async function fetchGithubTrending(limit = 15): Promise<RawSourceItem[]> 
       queries.map(async (qRaw) => {
         try {
           const q = encodeURIComponent(qRaw);
-          const res = await fetch(
+          const res = await researchFetch(
             `https://api.github.com/search/repositories?q=${q}&sort=stars&order=desc&per_page=${limit}`,
             {
               headers: githubHeaders(),
-              next: { revalidate: 600 },
-              signal: AbortSignal.timeout(12_000),
+              timeoutMs: 12_000,
             },
           );
           if (!res.ok) return;

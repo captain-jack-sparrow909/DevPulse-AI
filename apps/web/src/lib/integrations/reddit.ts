@@ -1,5 +1,6 @@
 import type { RawSourceItem } from "./types";
 import { REDDIT_SUBREDDITS } from "./catalog";
+import { researchFetch } from "./fetch";
 
 interface RedditChild {
   data: {
@@ -35,10 +36,9 @@ async function fetchSub(sub: string, limit: number): Promise<RawSourceItem[]> {
   for (const url of urls) {
     for (const headers of headersList) {
       try {
-        const res = await fetch(url, {
+        const res = await researchFetch(url, {
           headers,
-          next: { revalidate: 600 },
-          signal: AbortSignal.timeout(10_000),
+          timeoutMs: 10_000,
         });
         if (!res.ok) continue;
         const json = (await res.json()) as { data?: { children?: RedditChild[] } };

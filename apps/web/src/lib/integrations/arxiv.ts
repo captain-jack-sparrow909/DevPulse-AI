@@ -1,4 +1,5 @@
 import type { RawSourceItem } from "./types";
+import { researchFetch } from "./fetch";
 
 /**
  * arXiv API — free Atom feed search for recent AI/ML papers.
@@ -10,10 +11,9 @@ export async function fetchArxiv(limit = 14): Promise<RawSourceItem[]> {
       "cat:cs.AI OR cat:cs.LG OR cat:cs.CL OR cat:cs.CV OR cat:cs.RO",
     );
     const url = `https://export.arxiv.org/api/query?search_query=${query}&sortBy=submittedDate&sortOrder=descending&max_results=${limit}`;
-    const res = await fetch(url, {
+    const res = await researchFetch(url, {
       headers: { "User-Agent": "DevPulse-AI/1.0" },
-      next: { revalidate: 600 },
-      signal: AbortSignal.timeout(15_000),
+      timeoutMs: 15_000,
     });
     if (!res.ok) return [];
     const xml = await res.text();
