@@ -113,7 +113,12 @@ Each call:
 | Enable job | On |
 
 4. Save → **Run now** once to test  
-5. Expect JSON: `{ "ok": true, "created": 0 or 1, ... }`
+5. Expect a **fast** response: HTTP **202** with `{ "ok": true, "accepted": true, ... }`  
+   (Work continues on Vercel for up to ~60s. cron-job.org often times out if it waits for the full research+LLM run.)  
+6. Confirm in **Vercel → Logs** that the request is **200/202** and later log lines show `background ok`  
+7. Check **Posts** in the app for a new pack when a slot is due  
+
+Optional: increase cron-job.org **timeout** to 90s+ if the UI offers it (not required with the 202 quick-ack).
 
 Optional: also set query fallback  
 `https://YOUR-APP.vercel.app/api/cron/slot?secret=YOUR_CRON_SECRET`  
