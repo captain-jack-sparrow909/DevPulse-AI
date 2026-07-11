@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PostActions } from "@/components/post-actions";
+import { CopyIconButton } from "@/components/copy-icon-button";
 import { parseJsonArray } from "@/lib/utils";
 import { format } from "date-fns";
 import { promoteDuePosts } from "@/lib/schedule/promote-ready";
@@ -72,9 +73,16 @@ export default async function PostDetailPage({
             </Badge>
           )}
         </div>
-        <h1 className="page-title mt-3 break-words">
-          {post.title || "Untitled post"}
-        </h1>
+        <div className="mt-3 flex items-start gap-2.5">
+          <h1 className="page-title min-w-0 flex-1 break-words">
+            {post.title || "Untitled post"}
+          </h1>
+          <CopyIconButton
+            text={post.title || "Untitled post"}
+            label="Copy post title"
+            className="mt-1"
+          />
+        </div>
         <p className="page-subtitle">
           Same idea, two formats — long-form for LinkedIn, ≤280 chars per post for X.
         </p>

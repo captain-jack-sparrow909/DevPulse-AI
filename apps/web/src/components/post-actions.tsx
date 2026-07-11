@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { CopyIconButton } from "@/components/copy-icon-button";
 import {
   enforceXLimit,
   resolveDualContent,
@@ -33,7 +34,7 @@ export function PostActions({
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [copied, setCopied] = useState<"linkedin" | "x" | null>(null);
+  const [copied, setCopied] = useState<"linkedin" | "x" | `x-${number}` | null>(null);
 
   const xOverLimit = useMemo(
     () => xParts.some((p) => p.length > X_CHAR_LIMIT),
@@ -78,19 +79,26 @@ export function PostActions({
     }
   }
 
-  async function copyText(kind: "linkedin" | "x", text: string) {
+  async function copyText(kind: "linkedin" | "x" | `x-${number}`, text: string) {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(kind);
-      setMessage(
-        kind === "linkedin"
-          ? imagePath
+      if (kind === "linkedin") {
+        setMessage(
+          imagePath
             ? "LinkedIn copy ready. Paste on LinkedIn and attach the screenshot if useful."
-            : "LinkedIn text copied — paste into LinkedIn."
-          : imagePath
+            : "LinkedIn text copied — paste into LinkedIn.",
+        );
+      } else if (kind === "x") {
+        setMessage(
+          imagePath
             ? `X thread copied (${xParts.length} post${xParts.length === 1 ? "" : "s"}). Paste in order; attach screenshot on the first post if you want.`
             : `X thread copied (${xParts.length} post${xParts.length === 1 ? "" : "s"}). Paste each tweet in order.`,
-      );
+        );
+      } else {
+        const n = Number(kind.slice(2)) + 1;
+        setMessage(`X post ${n} copied — paste into X.`);
+      }
       setTimeout(() => setCopied(null), 2000);
     } catch {
       setMessage("Could not copy — select the text manually");
@@ -208,6 +216,24 @@ export function PostActions({
                     >
                       {part.length}/{X_CHAR_LIMIT}
                     </span>
+                    <CopyIconButton
+                      text={part}
+                      label={
+                        xParts.length > 1
+                          ? `Copy X post ${index + 1}`
+                          : "Copy X post"
+                      }
+                      className="h-7 w-7"
+                      onCopied={() => {
+                        setCopied(`x-${index}`);
+                        setMessage(
+                          xParts.length > 1
+                            ? `X post ${index + 1}/${xParts.length} copied — paste into X.`
+                            : "X post copied — paste into X.",
+                        );
+                        setTimeout(() => setCopied(null), 2000);
+                      }}
+                    />
                     {xParts.length > 1 && (
                       <button
                         type="button"
