@@ -92,10 +92,15 @@ Authorization: Bearer YOUR_CRON_SECRET
 
 Each call:
 1. Dispatcher returns **202 in under 1s** (safe for cron-job.org’s **30s** max timeout)
-2. A **detached worker** (`?worker=1`) runs research + write with a full ~60s budget
-3. Preps the next unfilled slot ~**50 min before** due (so the 6:00 post is ready *by* 6:00)
-4. **Retries** any empty due slot every tick until filled — no Regenerate click required
-5. Promotes approved posts → `ready`, then retention cleanup
+2. Workers run **one phase each** (fits Hobby **60s**):
+   - Research chunk 1: HN + Reddit  
+   - Chunk 2: GitHub + arXiv + Hugging Face  
+   - Chunk 3: RSS + Dev.to  
+   - Chunk 4: Stack Overflow + Product Hunt + Tavily (+ light X)  
+   - **Write** dual LinkedIn + X post from all stored sources  
+3. Workers **self-chain** until the post is written (~1–2 min wall time)
+4. Preps ~**50 min before** due; empty dues retry on the next external tick
+5. Screenshots are skipped on cron — use **Recapture** in the UI
 
 **Do not** set `CRON_SYNC=1` with a 30s client timeout.
 
@@ -169,7 +174,7 @@ npm run cron:loop    # terminal 2 — every 15 min
 |-------|----------|
 | **Vercel Cron** | Not used (Hobby = max 1/day → stale data) |
 | **External cron** | Free; drives fresh research all day |
-| **Serverless timeout** | Hobby max **60s** for the route — heavy runs may timeout; retry next tick or Generate in UI |
+| **Serverless timeout** | Hobby max **60s**. Cron uses **fast research** (~20s budget, lean providers, no screenshot) so write can finish. If you still see 504, check Vercel logs for research stampede. |
 | **Playwright** | Disabled on Vercel; works locally |
 | **Supabase pause** | External cron traffic keeps the project active |
 

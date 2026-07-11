@@ -1,29 +1,25 @@
 import { NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { runCronForAllUsers } from "@/lib/ai/pipeline";
+import { runCronPhaseForAllUsers } from "@/lib/ai/phased-pipeline";
 import { promoteDuePosts } from "@/lib/schedule/promote-ready";
 import { runRetentionCleanup } from "@/lib/maintenance/cleanup";
 
-/** Hobby max is 60s. Worker invocation uses this full budget for research+LLM. */
+/** Hobby max 60s — each worker runs ONE phase only, then may schedule the next worker. */
 export const maxDuration = 60;
 
+const MAX_CHAIN_DEPTH = 8; // 4 research chunks + write + margin
+
 /**
- * External cron target (cron-job.org / GitHub Actions / local loop).
+ * Multi-phase cron (Vercel Hobby 60s safe):
  *
- * Why two phases?
- * - cron-job.org free max request timeout = 30s
- * - research + DeepSeek often needs 30–60s
- * - Returning 202 and running work only via waitUntil in the *same* invocation
- *   was unreliable (empty due slots until the user hit Regenerate).
+ * External scheduler hits dispatcher → 202 in <1s.
+ * Each worker:
+ *   1) runs ONE research chunk OR the write phase (~15–35s)
+ *   2) if more work remains, schedules the *next* worker via waitUntil(fetch)
+ *   3) returns 200 so this invocation ends well under 60s
  *
- * Flow:
- * 1) Dispatcher (default): auth → kick a *detached* worker request → 202 in <1s
- * 2) Worker (?worker=1): runs generation to completion (up to maxDuration)
- *
- * Every 15 min tick retries any empty slot that is due or in its prep window
- * (~50 min before due), so a failed run is retried automatically — no UI click.
- *
- * Debug sync: ?wait=1 or CRON_SYNC=1 (not for cron-job.org).
+ * Chunks: community → code/papers → blogs → discovery → write
+ * Sources accumulate in DB between chunks; write uses the full set.
  *
  * Auth: Authorization: Bearer <CRON_SECRET>  or  ?secret=<CRON_SECRET>
  */
@@ -39,56 +35,78 @@ function authorized(request: Request): boolean {
   return false;
 }
 
-async function runCronWork(): Promise<{
+async function runOnePhaseWork(): Promise<{
   ok: boolean;
   message: string;
-  cleanup?: Record<string, number>;
   created?: number;
   users?: number;
-  results?: Array<{ userId: string; postsCreated: number; skipReason?: string }>;
+  continueChain?: boolean;
+  results?: Array<{
+    userId: string;
+    postsCreated: number;
+    skipReason?: string;
+    phase?: string;
+    continueChain?: boolean;
+  }>;
+  cleanup?: Record<string, number>;
   error?: string;
 }> {
   try {
-    // Generation first — 60s budget is tight; cleanup is secondary.
-    const result = await runCronForAllUsers();
+    const result = await runCronPhaseForAllUsers();
     await promoteDuePosts();
-    const cleanup = await runRetentionCleanup();
+
+    let cleanup: Awaited<ReturnType<typeof runRetentionCleanup>> | undefined;
+    if (result.created === 0 && !result.continueChain) {
+      cleanup = await runRetentionCleanup();
+    }
+
     return {
       ok: true,
-      message:
-        "Cron finished: prep/retry slot generation + promote + cleanup. Empty due slots are retried every tick.",
-      cleanup: {
-        postsDeleted: cleanup.postsDeleted,
-        sourcesDeleted: cleanup.sourcesDeleted,
-        researchRunsDeleted: cleanup.researchRunsDeleted,
-        generationJobsDeleted: cleanup.generationJobsDeleted,
-        screenshotsDeleted: cleanup.screenshotsDeleted,
-      },
+      message: result.continueChain
+        ? "Phase done; next worker will continue research or write."
+        : "Phase done; chain complete for this slot (or nothing due).",
       created: result.created,
       users: result.users,
+      continueChain: result.continueChain,
       results: result.results,
+      cleanup: cleanup
+        ? {
+            postsDeleted: cleanup.postsDeleted,
+            sourcesDeleted: cleanup.sourcesDeleted,
+            researchRunsDeleted: cleanup.researchRunsDeleted,
+            generationJobsDeleted: cleanup.generationJobsDeleted,
+            screenshotsDeleted: cleanup.screenshotsDeleted,
+          }
+        : undefined,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Cron failed";
+    const message = err instanceof Error ? err.message : "Cron phase failed";
     console.error("[cron/slot]", message);
-    return { ok: false, message: "Cron failed", error: message };
+    return { ok: false, message: "Cron phase failed", error: message };
   }
 }
 
-function buildWorkerUrl(request: Request): string {
+function buildWorkerUrl(request: Request, depth: number): URL {
   const url = new URL(request.url);
   url.searchParams.set("worker", "1");
+  url.searchParams.set("depth", String(depth));
   url.searchParams.delete("wait");
-  // Ensure auth still works if the outer call used ?secret=
   const secret = process.env.CRON_SECRET?.trim();
-  if (secret && !url.searchParams.get("secret")) {
-    // Prefer header on fetch; secret query is a fallback for some hosts
+  const auth = request.headers.get("authorization");
+  if (secret && !url.searchParams.get("secret") && !auth) {
+    url.searchParams.set("secret", secret);
   }
-  return url.toString();
+  return url;
 }
 
-async function dispatchWorker(request: Request): Promise<void> {
-  const workerUrl = buildWorkerUrl(request);
+/** Fire-and-forget next worker (separate 60s budget). Do not await completion of the whole chain. */
+function scheduleNextWorker(request: Request, depth: number): void {
+  if (depth > MAX_CHAIN_DEPTH) {
+    console.warn(`[cron/slot] chain depth ${depth} exceeded max ${MAX_CHAIN_DEPTH}`);
+    return;
+  }
+
+  const url = buildWorkerUrl(request, depth);
   const headers: Record<string, string> = {
     Accept: "application/json",
     "x-devpulse-cron-worker": "1",
@@ -96,33 +114,28 @@ async function dispatchWorker(request: Request): Promise<void> {
   const auth = request.headers.get("authorization");
   if (auth) headers.Authorization = auth;
 
-  const secret = process.env.CRON_SECRET?.trim();
-  const urlWithSecret = new URL(workerUrl);
-  if (secret && !urlWithSecret.searchParams.get("secret") && !auth) {
-    urlWithSecret.searchParams.set("secret", secret);
-  }
-
-  console.log("[cron/slot] dispatching detached worker…");
-  try {
-    const res = await fetch(urlWithSecret.toString(), {
-      method: "GET",
-      headers,
-      cache: "no-store",
+  const work = fetch(url.toString(), {
+    method: "GET",
+    headers,
+    cache: "no-store",
+  })
+    .then(async (res) => {
+      const text = await res.text();
+      console.log(
+        `[cron/slot] chained worker depth=${depth} status=${res.status} ${text.slice(0, 300)}`,
+      );
+    })
+    .catch((err) => {
+      console.error(
+        `[cron/slot] chain fetch depth=${depth} failed:`,
+        err instanceof Error ? err.message : err,
+      );
     });
-    const text = await res.text();
-    console.log(
-      `[cron/slot] worker finished status=${res.status} body=${text.slice(0, 600)}`,
-    );
-  } catch (err) {
-    // If self-fetch fails (rare), run work inline in this waitUntil budget
-    console.error(
-      "[cron/slot] worker fetch failed, falling back to inline run:",
-      err instanceof Error ? err.message : err,
-    );
-    const result = await runCronWork();
-    console.log(
-      `[cron/slot] inline fallback: ok=${result.ok} created=${result.created} error=${result.error ?? ""}`,
-    );
+
+  try {
+    waitUntil(work);
+  } catch {
+    void work;
   }
 }
 
@@ -135,32 +148,32 @@ async function handle(request: Request) {
   const isWorker = url.searchParams.get("worker") === "1";
   const waitForResult =
     url.searchParams.get("wait") === "1" || process.env.CRON_SYNC === "1";
+  const depth = Number(url.searchParams.get("depth") || "0") || 0;
 
-  // Worker or explicit sync: run generation to completion in this invocation
+  // Worker / sync: one phase only, then schedule next worker if needed
   if (isWorker || waitForResult) {
-    const result = await runCronWork();
+    const result = await runOnePhaseWork();
     console.log(
-      `[cron/slot] ${isWorker ? "worker" : "sync"} done: created=${result.created} users=${result.users} ok=${result.ok}`,
+      `[cron/slot] phase depth=${depth} created=${result.created} chain=${result.continueChain} ok=${result.ok}`,
     );
+
+    if (result.ok && result.continueChain) {
+      // Next phase gets its own invocation + 60s budget
+      scheduleNextWorker(request, depth + 1);
+    }
+
     return NextResponse.json(result, { status: result.ok ? 200 : 500 });
   }
 
-  // Dispatcher: return 202 immediately (safe for 30s scheduler caps),
-  // then start a detached worker with its own maxDuration budget.
-  const dispatch = dispatchWorker(request);
-  try {
-    waitUntil(dispatch);
-  } catch {
-    // Local Next.js may not support waitUntil
-    void dispatch;
-  }
+  // Dispatcher: 202 immediately, kick first worker only
+  scheduleNextWorker(request, 0);
 
   return NextResponse.json(
     {
       ok: true,
       accepted: true,
       message:
-        "Cron accepted. Detached worker will prep/retry the next slot (research + write). Empty due slots retry every 15 min until filled — no Regenerate click required.",
+        "Cron accepted. Workers will run research in 4 chunks, then write (self-chained). Each step stays under 60s.",
     },
     { status: 202 },
   );

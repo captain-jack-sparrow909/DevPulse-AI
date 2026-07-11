@@ -11,14 +11,20 @@ interface SoItem {
   tags?: string[];
 }
 
+export interface FetchStackOverflowOptions {
+  tags?: string[];
+  timeoutMs?: number;
+}
+
 /**
  * Stack Exchange API — works without a key (shared IP quota).
- * Optional STACKEXCHANGE_KEY for higher daily quota.
- * Note: `tagged` uses AND for multiple tags, so we query tags separately.
  */
-export async function fetchStackOverflow(limit = 10): Promise<RawSourceItem[]> {
+export async function fetchStackOverflow(
+  limit = 10,
+  options: FetchStackOverflowOptions = {},
+): Promise<RawSourceItem[]> {
   const key = process.env.STACKEXCHANGE_KEY?.trim();
-  const tags = [
+  const tags = options.tags ?? [
     "typescript",
     "reactjs",
     "kubernetes",
@@ -27,6 +33,7 @@ export async function fetchStackOverflow(limit = 10): Promise<RawSourceItem[]> {
     "llm",
     "next.js",
   ];
+  const timeoutMs = options.timeoutMs ?? 12_000;
   const all: RawSourceItem[] = [];
 
   await Promise.all(
@@ -45,7 +52,7 @@ export async function fetchStackOverflow(limit = 10): Promise<RawSourceItem[]> {
           `https://api.stackexchange.com/2.3/questions?${params}`,
           {
             headers: { "User-Agent": "DevPulse-AI/1.0" },
-            timeoutMs: 12_000,
+            timeoutMs,
           },
         );
         if (!res.ok) return;

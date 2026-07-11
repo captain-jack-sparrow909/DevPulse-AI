@@ -12,11 +12,18 @@ interface DevToArticle {
   user?: { name?: string };
 }
 
+export interface FetchDevToOptions {
+  tags?: string[];
+  timeoutMs?: number;
+}
+
 /**
  * Dev.to / Forem public API — free, no key required.
- * Optional DEVTO_API_KEY if you hit rate limits.
  */
-export async function fetchDevTo(limit = 12): Promise<RawSourceItem[]> {
+export async function fetchDevTo(
+  limit = 12,
+  options: FetchDevToOptions = {},
+): Promise<RawSourceItem[]> {
   try {
     const headers: Record<string, string> = {
       "User-Agent": "DevPulse-AI/1.0",
@@ -25,7 +32,8 @@ export async function fetchDevTo(limit = 12): Promise<RawSourceItem[]> {
     const key = process.env.DEVTO_API_KEY?.trim();
     if (key) headers["api-key"] = key;
 
-    const tags = ["ai", "machinelearning", "typescript", "javascript", "webdev"];
+    const tags = options.tags ?? ["ai", "machinelearning", "typescript", "javascript", "webdev"];
+    const timeoutMs = options.timeoutMs ?? 12_000;
     const all: RawSourceItem[] = [];
 
     await Promise.all(
@@ -33,7 +41,7 @@ export async function fetchDevTo(limit = 12): Promise<RawSourceItem[]> {
         try {
           const res = await researchFetch(
             `https://dev.to/api/articles?tag=${tag}&top=7&per_page=${Math.ceil(limit / tags.length)}`,
-            { headers, timeoutMs: 12_000 },
+            { headers, timeoutMs },
           );
           if (!res.ok) return;
           const articles = (await res.json()) as DevToArticle[];
@@ -58,7 +66,6 @@ export async function fetchDevTo(limit = 12): Promise<RawSourceItem[]> {
       }),
     );
 
-    // Dedupe by id
     const seen = new Set<string>();
     return all
       .filter((i) => {

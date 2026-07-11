@@ -1,4 +1,4 @@
-import { PROVIDER_PRIORITY } from "./catalog";
+import { PROVIDER_PRIORITY, RSS_FEEDS, REDDIT_SUBREDDITS } from "./catalog";
 import { fetchArxiv } from "./arxiv";
 import { fetchDevTo } from "./devto";
 import { fetchGithubTrending } from "./github";
@@ -15,7 +15,19 @@ import type { RawSourceItem } from "./types";
 export type { RawSourceItem, ResearchProvider } from "./types";
 export { RSS_FEEDS, REDDIT_SUBREDDITS, ARXIV_CATEGORIES } from "./catalog";
 
-async function settled<T>(label: string, p: Promise<T[]>): Promise<{ label: string; items: T[] }> {
+export type CollectMode = "fast" | "full";
+
+export interface CollectOptions {
+  /**
+   * fast (default): ~20s budget, lean providers — required for Vercel Hobby 60s cron.
+   * full: wider catalog for local / long-running manual runs.
+   */
+  mode?: CollectMode;
+  /** Hard wall-clock cap for all collectors (ms). */
+  budgetMs?: number;
+}
+
+async function settled(label: string, p: Promise<RawSourceItem[]>): Promise<{ label: string; items: RawSourceItem[] }> {
   try {
     const items = await p;
     return { label, items };
@@ -24,36 +36,7 @@ async function settled<T>(label: string, p: Promise<T[]>): Promise<{ label: stri
   }
 }
 
-/**
- * Collect research signals from the information-sources.md catalog.
- * Never posts to any social platform — research only.
- *
- * Free / no-key: HN, GitHub (low volume), arXiv, Reddit, RSS blogs, HF, Dev.to, Stack Overflow
- * Optional keys: GITHUB_TOKEN, HF_TOKEN, DEVTO_API_KEY, STACKEXCHANGE_KEY,
- * PRODUCTHUNT_TOKEN, X_BEARER_TOKEN, TAVILY_API_KEY
- * X is used lightly (paid API) — only if bearer is set.
- */
-export async function collectAllSources(): Promise<RawSourceItem[]> {
-  const results = await Promise.all([
-    settled("hackernews", fetchHackerNews(20)),
-    settled("github", fetchGithubTrending(14)),
-    settled("arxiv", fetchArxiv(12)),
-    settled("reddit", fetchReddit(3)),
-    settled("rss", fetchRssFeeds(3)),
-    settled("huggingface", fetchHuggingFace(10)),
-    settled("devto", fetchDevTo(12)),
-    settled("stackoverflow", fetchStackOverflow(12)),
-    settled("producthunt", fetchProductHunt(6)),
-    settled("tavily", fetchTavily(9)),
-    settled("x", fetchXResearch(10)), // light use only
-  ]);
-
-  const all: RawSourceItem[] = [];
-  for (const r of results) {
-    all.push(...r.items);
-  }
-
-  // Normalize + dedupe by URL and provider:id
+function dedupeAndScore(all: RawSourceItem[]): RawSourceItem[] {
   const seen = new Set<string>();
   const deduped: RawSourceItem[] = [];
 
@@ -73,6 +56,95 @@ export async function collectAllSources(): Promise<RawSourceItem[]> {
   }
 
   return deduped.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+}
+
+/** High-signal subs only — full list was 15× hosts×UAs and burned the 60s budget. */
+const FAST_REDDIT_SUBS = [
+  "MachineLearning",
+  "LocalLLaMA",
+  "programming",
+  "typescript",
+] as const;
+
+/**
+ * Collect research signals from the information-sources catalog.
+ * Never posts to any social platform — research only.
+ *
+ * On Vercel Hobby the whole cron is max 60s. Research must finish in ~20s
+ * so DeepSeek writing still has time. Use mode:"full" only locally.
+ */
+export async function collectAllSources(options: CollectOptions = {}): Promise<RawSourceItem[]> {
+  const mode = options.mode ?? "fast";
+  const budgetMs =
+    options.budgetMs ??
+    (mode === "fast" ? 20_000 : 50_000);
+
+  const bag: RawSourceItem[] = [];
+  const push = (items: RawSourceItem[]) => {
+    for (const i of items) bag.push(i);
+  };
+
+  const tasks: Promise<void>[] =
+    mode === "fast"
+      ? [
+          // Lean parallel set — enough diversity for slot lanes without stampeding
+          settled("hackernews", fetchHackerNews(8)).then((r) => push(r.items)),
+          settled("github", fetchGithubTrending(6)).then((r) => push(r.items)),
+          settled("arxiv", fetchArxiv(6)).then((r) => push(r.items)),
+          settled(
+            "reddit",
+            fetchReddit({
+              limitPerSub: 3,
+              subs: [...FAST_REDDIT_SUBS],
+              fast: true,
+            }),
+          ).then((r) => push(r.items)),
+          settled(
+            "rss",
+            fetchRssFeeds({
+              perFeed: 2,
+              maxFeeds: 8,
+              // Prefer AI + eng blogs (priority ≥ 4)
+              minPriority: 4,
+              timeoutMs: 5_000,
+            }),
+          ).then((r) => push(r.items)),
+          settled("huggingface", fetchHuggingFace(6)).then((r) => push(r.items)),
+          settled("devto", fetchDevTo(8, { tags: ["ai", "typescript"], timeoutMs: 6_000 })).then(
+            (r) => push(r.items),
+          ),
+          settled("stackoverflow", fetchStackOverflow(6, { tags: ["typescript", "llm"], timeoutMs: 6_000 })).then(
+            (r) => push(r.items),
+          ),
+          settled("producthunt", fetchProductHunt(4)).then((r) => push(r.items)),
+          settled("tavily", fetchTavily(4, { queries: 1, timeoutMs: 8_000 })).then((r) =>
+            push(r.items),
+          ),
+          // Skip X in fast mode — often slow / rate-limited and optional
+        ]
+      : [
+          settled("hackernews", fetchHackerNews(20)).then((r) => push(r.items)),
+          settled("github", fetchGithubTrending(14)).then((r) => push(r.items)),
+          settled("arxiv", fetchArxiv(12)).then((r) => push(r.items)),
+          settled("reddit", fetchReddit({ limitPerSub: 3 })).then((r) => push(r.items)),
+          settled("rss", fetchRssFeeds({ perFeed: 3 })).then((r) => push(r.items)),
+          settled("huggingface", fetchHuggingFace(10)).then((r) => push(r.items)),
+          settled("devto", fetchDevTo(12)).then((r) => push(r.items)),
+          settled("stackoverflow", fetchStackOverflow(12)).then((r) => push(r.items)),
+          settled("producthunt", fetchProductHunt(6)).then((r) => push(r.items)),
+          settled("tavily", fetchTavily(9)).then((r) => push(r.items)),
+          settled("x", fetchXResearch(10)).then((r) => push(r.items)),
+        ];
+
+  await Promise.race([
+    Promise.allSettled(tasks),
+    new Promise<void>((resolve) => setTimeout(resolve, budgetMs)),
+  ]);
+
+  // Give in-flight collectors a brief grace to flush if budget fired mid-flight
+  await new Promise((r) => setTimeout(r, 50));
+
+  return dedupeAndScore(bag);
 }
 
 /** Human-readable source mix for pipeline logs */

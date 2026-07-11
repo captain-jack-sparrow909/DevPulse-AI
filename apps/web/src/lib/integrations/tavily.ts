@@ -8,19 +8,30 @@ interface TavilyResult {
   score?: number;
 }
 
+export interface FetchTavilyOptions {
+  /** How many of the default query list to run (fast mode uses 1). */
+  queries?: number;
+  timeoutMs?: number;
+}
+
 /**
  * Tavily web search — uses TAVILY_API_KEY when set.
- * Good fallback for fresh AI/eng signal when Reddit is blocked.
  */
-export async function fetchTavily(limit = 8): Promise<RawSourceItem[]> {
+export async function fetchTavily(
+  limit = 8,
+  options: FetchTavilyOptions = {},
+): Promise<RawSourceItem[]> {
   const apiKey = process.env.TAVILY_API_KEY?.trim();
   if (!apiKey) return [];
 
-  const queries = [
+  const allQueries = [
     "latest AI model release developer news",
     "open source LLM tools GitHub trending",
     "TypeScript React infrastructure engineering blog",
   ];
+  const queryCount = Math.max(1, Math.min(options.queries ?? allQueries.length, allQueries.length));
+  const queries = allQueries.slice(0, queryCount);
+  const timeoutMs = options.timeoutMs ?? 15_000;
 
   const all: RawSourceItem[] = [];
 
@@ -37,7 +48,7 @@ export async function fetchTavily(limit = 8): Promise<RawSourceItem[]> {
             search_depth: "basic",
             include_answer: false,
           }),
-          timeoutMs: 15_000,
+          timeoutMs,
         });
         if (!res.ok) return;
         const data = (await res.json()) as { results?: TavilyResult[] };

@@ -47,7 +47,6 @@ function parseFeedXml(xml: string, feed: RssFeed, limit: number): RawSourceItem[
       tag(chunk, "content") ||
       undefined;
     const externalId = `${feed.name}:${url}`.slice(0, 180);
-    // Tech news deprioritized vs primary sources
     const baseScore = feed.priority * 12 + (feed.category === "tech_news" ? -8 : 0);
     out.push({
       provider: "rss",
@@ -63,19 +62,22 @@ function parseFeedXml(xml: string, feed: RssFeed, limit: number): RawSourceItem[
   return out;
 }
 
-async function fetchOneFeed(feed: RssFeed, limit: number): Promise<RawSourceItem[]> {
+async function fetchOneFeed(
+  feed: RssFeed,
+  limit: number,
+  timeoutMs: number,
+): Promise<RawSourceItem[]> {
   try {
     const res = await researchFetch(feed.url, {
       headers: {
         "User-Agent": "DevPulse-AI/1.0 (research RSS reader)",
         Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
       },
-      timeoutMs: 12_000,
+      timeoutMs,
     });
     if (!res.ok) return [];
-    // Cap body size — huge atom feeds (multi‑MB) are truncated for parsing
     const buf = await res.arrayBuffer();
-    const maxBytes = 1_500_000; // under Next 2MB data-cache limit; we use no-store anyway
+    const maxBytes = 1_500_000;
     const slice = buf.byteLength > maxBytes ? buf.slice(0, maxBytes) : buf;
     const xml = new TextDecoder("utf-8", { fatal: false }).decode(slice);
     return parseFeedXml(xml, feed, limit);
@@ -84,18 +86,40 @@ async function fetchOneFeed(feed: RssFeed, limit: number): Promise<RawSourceItem
   }
 }
 
+export interface FetchRssOptions {
+  perFeed?: number;
+  maxFeeds?: number;
+  minPriority?: number;
+  timeoutMs?: number;
+}
+
 /**
  * Pull RSS/Atom from AI company blogs, engineering blogs, and (lightly) tech news.
- * No API keys required.
  */
-export async function fetchRssFeeds(perFeed = 4): Promise<RawSourceItem[]> {
-  // Cap concurrent fetches to avoid stampeding remote hosts
-  const batchSize = 6;
+export async function fetchRssFeeds(
+  perFeedOrOpts: number | FetchRssOptions = 4,
+): Promise<RawSourceItem[]> {
+  const opts: FetchRssOptions =
+    typeof perFeedOrOpts === "number" ? { perFeed: perFeedOrOpts } : perFeedOrOpts;
+
+  const perFeed = opts.perFeed ?? 4;
+  const timeoutMs = opts.timeoutMs ?? 12_000;
+  let feeds = [...RSS_FEEDS];
+  if (opts.minPriority != null) {
+    feeds = feeds.filter((f) => f.priority >= opts.minPriority!);
+  }
+  // Highest priority first when capping
+  feeds.sort((a, b) => b.priority - a.priority);
+  if (opts.maxFeeds != null) {
+    feeds = feeds.slice(0, opts.maxFeeds);
+  }
+
+  const batchSize = opts.maxFeeds && opts.maxFeeds <= 10 ? opts.maxFeeds : 6;
   const results: RawSourceItem[] = [];
 
-  for (let i = 0; i < RSS_FEEDS.length; i += batchSize) {
-    const batch = RSS_FEEDS.slice(i, i + batchSize);
-    const settled = await Promise.all(batch.map((f) => fetchOneFeed(f, perFeed)));
+  for (let i = 0; i < feeds.length; i += batchSize) {
+    const batch = feeds.slice(i, i + batchSize);
+    const settled = await Promise.all(batch.map((f) => fetchOneFeed(f, perFeed, timeoutMs)));
     for (const items of settled) results.push(...items);
   }
 

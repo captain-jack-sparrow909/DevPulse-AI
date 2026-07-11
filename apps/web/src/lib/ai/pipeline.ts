@@ -35,8 +35,15 @@ import {
 
 export interface PipelineOptions {
   userId: string;
-  /** Force a specific slot (0–11). If omitted, picks the latest due unfilled slot. */
+  /** Force a specific slot (0–11). If omitted, picks the next prep/due slot. */
   slotIndex?: number;
+  /**
+   * Research breadth. Default "fast" fits Vercel Hobby 60s (research ~20s + write).
+   * Use "full" only for local long runs.
+   */
+  researchMode?: "fast" | "full";
+  /** Skip screenshot capture (saves ~15–40s). Default true in fast mode. */
+  skipScreenshot?: boolean;
   /**
    * If true, generate even when the slot time has not arrived yet
    * (manual “prepare next slot early” — still only ONE post).
@@ -587,18 +594,26 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       options.onLog,
     );
     log(logs, "Manual posting mode: never auto-posting to X/LinkedIn", options.onLog);
+    const researchMode = options.researchMode ?? "fast";
+    const skipScreenshot =
+      options.skipScreenshot ?? researchMode === "fast";
     log(
       logs,
-      "Collecting sources (RSS, HN, GitHub, arXiv, HF, Reddit, Dev.to, SO, Tavily, PH, light X)…",
+      `Collecting sources (${researchMode} mode, budget ~${researchMode === "fast" ? "20" : "50"}s)…`,
       options.onLog,
     );
 
-    const rawSources = await collectAllSources();
+    const rawSources = await collectAllSources({ mode: researchMode });
     log(
       logs,
       `Fetched ${rawSources.length} raw sources · ${describeSourceMix(rawSources)}`,
       options.onLog,
     );
+    if (rawSources.length === 0) {
+      throw new Error(
+        "Research returned 0 sources within time budget — will retry next cron tick",
+      );
+    }
 
     // Persist a diversified feed (not only topic-matched HN/arXiv)
     const toStore = diversifySources(rawSources, 120, 12);
@@ -776,13 +791,15 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     let produced = 0;
     let lastError = "";
 
-    // Try more candidates so provider diversity can skip over-quota / weak fits
-    for (let attempt = 0; attempt < Math.min(14, ordered.length); attempt++) {
+    // Fast mode: fewer rewrite attempts so we finish inside 60s
+    const maxAttempts = researchMode === "fast" ? Math.min(4, ordered.length) : Math.min(10, ordered.length);
+    const allowRewrite = researchMode === "full";
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const picked = ordered[attempt]!;
       const source = picked.item;
       const providerUses = usedProviderCounts.get(source.provider) ?? 0;
-      if (providerUses >= MAX_POSTS_PER_PROVIDER_PER_DAY && attempt < ordered.length - 3) {
-        // Skip early if this provider is already at daily cap (unless few options left)
+      if (providerUses >= MAX_POSTS_PER_PROVIDER_PER_DAY && attempt < ordered.length - 2) {
         log(
           logs,
           `Skip ${source.provider} (already ${providerUses} today, max ${MAX_POSTS_PER_PROVIDER_PER_DAY}) — next candidate`,
@@ -808,10 +825,14 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         options.onLog,
       );
 
-      // Score primarily on LinkedIn body (full idea); X is a constrained rewrite
-      let scores = await scoreContent(draft.linkedIn, "linkedin", useAi);
+      // Fast mode: heuristic score only (skip second LLM call to stay under 60s)
+      let scores = await scoreContent(
+        draft.linkedIn,
+        "linkedin",
+        useAi && researchMode === "full",
+      );
 
-      if (scores.overall < threshold && useAi) {
+      if (scores.overall < threshold && useAi && allowRewrite) {
         log(logs, `Score ${scores.overall} < ${threshold} — rewriting LinkedIn body…`, options.onLog);
         try {
           const edited = await chatCompletion({
@@ -836,7 +857,9 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         }
       }
 
-      if (scores.overall < threshold - 1.5 && useAi) {
+      // In fast mode accept drafts more liberally — next cron can regenerate if weak
+      const rejectFloor = researchMode === "fast" ? threshold - 3 : threshold - 1.5;
+      if (scores.overall < rejectFloor && useAi) {
         lastError = `Low quality score ${scores.overall}`;
         log(logs, `Rejected draft (${scores.overall}), trying next source…`, options.onLog);
         continue;
@@ -860,7 +883,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           ),
       );
 
-      // Always attempt Playwright screenshot for the chosen slot source
+      // Screenshots can take 20–40s alone — skip on fast/cron so writing finishes under 60s
       const imageDecision = shouldIncludeImage({
         platform: "both",
         angle,
@@ -874,8 +897,12 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       let imageCaption: string | null = null;
       let imageSkipReason: string | null = imageDecision.reason;
 
-      if (imageDecision.needsImage) {
-        log(logs, `Playwright screenshot for chosen source: ${source.url.slice(0, 90)}…`, options.onLog);
+      if (skipScreenshot) {
+        imageSkipReason =
+          "Screenshot deferred on fast cron path (use Recapture on post page if needed)";
+        log(logs, imageSkipReason, options.onLog);
+      } else if (imageDecision.needsImage) {
+        log(logs, `Screenshot for chosen source: ${source.url.slice(0, 90)}…`, options.onLog);
         const shot = await capturePageScreenshot(source.url, {
           filename: `${Date.now()}-slot${slotIndex}.png`,
         });
@@ -1017,8 +1044,12 @@ export async function runCronForAllUsers(): Promise<{
 
   for (const user of users) {
     try {
-      // allowEarly is handled inside via prep window; no need to force all slots early
-      const r = await runDueSlotGeneration({ userId: user.id });
+      // Fast research + no screenshot — must fit Vercel Hobby 60s
+      const r = await runDueSlotGeneration({
+        userId: user.id,
+        researchMode: "fast",
+        skipScreenshot: true,
+      });
       created += r.postsCreated;
       results.push({
         userId: user.id,
