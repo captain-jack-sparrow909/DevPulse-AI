@@ -66,6 +66,19 @@ Click **Deploy**. Build runs `prisma generate` + `next build`.
 
 If Prisma fails: confirm `DATABASE_URL` / `DIRECT_URL`, and that you already ran `npx prisma db push` against Supabase locally.
 
+### Cron error: `Can't reach database server at db.…:5432`
+
+Vercel is using the **direct** host. Serverless often cannot reach it reliably.
+
+1. Supabase → **Project Settings → Database → Connect**
+2. Pick **Transaction pooler** (port **6543**), not Direct
+3. On Vercel set `DATABASE_URL` (and optionally `DATABASE_URL_POOLED`) to that pooler URI with:
+
+   `?pgbouncer=true&connection_limit=5&sslmode=require`
+
+4. Confirm the project is **not paused** (Restore if needed)
+5. Redeploy, then **Execute now** on cron-job.org
+
 ---
 
 ## 4. External cron (required for fresh slots)
