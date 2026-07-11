@@ -198,33 +198,43 @@ export async function PATCH(
   }
 
   if (body.action === "recapture_image") {
-    const sourceUrl =
-      post.imageSourceUrl ||
-      post.sources[0]?.source.url ||
-      null;
-    if (!sourceUrl) {
-      return NextResponse.json({ error: "No source URL to capture" }, { status: 400 });
+    try {
+      const sourceUrl =
+        post.imageSourceUrl ||
+        post.sources[0]?.source.url ||
+        null;
+      if (!sourceUrl) {
+        return NextResponse.json({ error: "No source URL to capture" }, { status: 400 });
+      }
+      const shot = await capturePageScreenshot(sourceUrl, {
+        filename: `${id}-${Date.now()}.png`,
+      });
+      if (!shot.ok || !shot.publicPath) {
+        return NextResponse.json(
+          {
+            error: shot.error || "Screenshot failed",
+            hint:
+              "On Vercel, ensure R2_BUCKET exists and CLOUDFLARE_S3_ENDPOINT/ACCESS_KEY/SECRET_KEY are set. Bucket name must match R2_BUCKET (default: devpulse-screenshots).",
+          },
+          { status: 500 },
+        );
+      }
+      const updated = await prisma.post.update({
+        where: { id },
+        data: {
+          needsImage: true,
+          imagePath: shot.publicPath,
+          imageSourceUrl: sourceUrl,
+          imageCaption: `Screenshot of: ${(post.title || sourceUrl).slice(0, 120)}`,
+          imageSkipReason: null,
+        },
+      });
+      return NextResponse.json(updated);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Recapture failed";
+      console.error("[recapture_image]", message);
+      return NextResponse.json({ error: message }, { status: 500 });
     }
-    const shot = await capturePageScreenshot(sourceUrl, {
-      filename: `${id}-${Date.now()}.png`,
-    });
-    if (!shot.ok || !shot.publicPath) {
-      return NextResponse.json(
-        { error: shot.error || "Screenshot failed" },
-        { status: 500 },
-      );
-    }
-    const updated = await prisma.post.update({
-      where: { id },
-      data: {
-        needsImage: true,
-        imagePath: shot.publicPath,
-        imageSourceUrl: sourceUrl,
-        imageCaption: `Screenshot of: ${(post.title || sourceUrl).slice(0, 120)}`,
-        imageSkipReason: null,
-      },
-    });
-    return NextResponse.json(updated);
   }
 
   if (body.action === "clear_image") {

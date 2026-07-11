@@ -221,6 +221,9 @@ export async function capturePageScreenshot(
 
   try {
     const saved = await saveBuffer(filename, buffer);
+    console.log(
+      `[screenshot] ok via ${method}, ${buffer.byteLength} bytes → ${saved.publicPath}`,
+    );
     return {
       ok: true,
       publicPath: saved.publicPath,
@@ -230,7 +233,8 @@ export async function capturePageScreenshot(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to store screenshot";
-    return { ok: false, sourceUrl: url, error: `${method}: ${message}` };
+    console.error(`[screenshot] store failed (${method}):`, message);
+    return { ok: false, sourceUrl: url, error: message };
   }
 }
 
