@@ -24,8 +24,8 @@ export async function GET(request: Request) {
         error: "R2 env missing",
         need: [
           "CLOUDFLARE_S3_ENDPOINT",
-          "CLOUDFLARE_ACCESS_KEY",
-          "CLOUDFLARE_SECRET_KEY",
+          "CLOUDFLARE_ACCESS_KEY or CLOUDFLARE_ACCESS_KEY_ID",
+          "CLOUDFLARE_SECRET_KEY or CLOUDFLARE_SECRET_ACCESS_KEY",
           "R2_BUCKET",
         ],
       },

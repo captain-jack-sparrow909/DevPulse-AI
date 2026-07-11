@@ -23,11 +23,30 @@ function bucket(): string {
   );
 }
 
+/** Accept both our names and Cloudflare's default S3 token labels. */
+function r2AccessKeyId(): string {
+  return (
+    process.env.CLOUDFLARE_ACCESS_KEY?.trim() ||
+    process.env.CLOUDFLARE_ACCESS_KEY_ID?.trim() ||
+    process.env.R2_ACCESS_KEY_ID?.trim() ||
+    ""
+  );
+}
+
+function r2SecretAccessKey(): string {
+  return (
+    process.env.CLOUDFLARE_SECRET_KEY?.trim() ||
+    process.env.CLOUDFLARE_SECRET_ACCESS_KEY?.trim() ||
+    process.env.R2_SECRET_ACCESS_KEY?.trim() ||
+    ""
+  );
+}
+
 export function isR2Configured(): boolean {
   return Boolean(
     process.env.CLOUDFLARE_S3_ENDPOINT?.trim() &&
-      process.env.CLOUDFLARE_ACCESS_KEY?.trim() &&
-      process.env.CLOUDFLARE_SECRET_KEY?.trim(),
+      r2AccessKeyId() &&
+      r2SecretAccessKey(),
   );
 }
 
@@ -72,8 +91,8 @@ function client(): S3Client {
     region: "auto",
     endpoint,
     credentials: {
-      accessKeyId: process.env.CLOUDFLARE_ACCESS_KEY!.trim(),
-      secretAccessKey: process.env.CLOUDFLARE_SECRET_KEY!.trim(),
+      accessKeyId: r2AccessKeyId(),
+      secretAccessKey: r2SecretAccessKey(),
     },
     forcePathStyle: true,
   };
