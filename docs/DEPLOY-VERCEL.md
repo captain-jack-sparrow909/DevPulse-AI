@@ -80,20 +80,40 @@ If build fails on Prisma:
 
 ## 4. Cron (auto-generate slots)
 
-`vercel.json` registers:
+### Vercel Hobby limit (this often blocks deploy)
+
+On the **Hobby (free)** plan, Vercel Cron may run **at most once per day**.  
+A schedule like `*/15 * * * *` **fails deployment** with an error about daily cron limits.
+
+`vercel.json` on Hobby-safe default:
 
 ```text
-*/15 * * * *  →  GET /api/cron/slot
+0 6 * * *  →  GET /api/cron/slot   (once daily at 06:00 UTC)
 ```
 
-On the **Hobby** plan, Vercel Cron is available for production. Each tick:
-
-1. Deletes posts/research older than 30 days  
-2. Deletes local screenshots older than 1 day (no-op if no disk on serverless)  
+That one daily run still:
+1. Cleans posts/research older than 30 days  
+2. Tries screenshot cleanup  
 3. Promotes due approved posts  
-4. Generates at most one dual pack per user if a slot is due  
+4. Generates at most one dual pack if a slot is due  
+5. Touches the DB (helps keep Supabase awake)
 
-Protects with `CRON_SECRET` when set. Vercel’s cron requests should send the project’s auth; if your handler only accepts Bearer secret, add the secret in Vercel env and ensure Hobby/Pro cron headers match — our handler also accepts `x-vercel-cron: 1`.
+### For 12 slots / day on free tier (recommended)
+
+Use a **free external cron** (no Vercel Pro needed), e.g. [cron-job.org](https://cron-job.org) or [EasyCron](https://www.easycron.com):
+
+| Field | Value |
+|-------|--------|
+| URL | `https://YOUR-APP.vercel.app/api/cron/slot` |
+| Schedule | Every 15 minutes |
+| Method | GET |
+| Header | `Authorization: Bearer YOUR_CRON_SECRET` |
+
+Same endpoint, more frequent. Vercel’s own cron stays daily (Hobby-safe); external cron does the 15‑minute work.
+
+### Pro plan
+
+On **Vercel Pro**, you can change the schedule back to `*/15 * * * *` in `vercel.json`.
 
 ---
 
