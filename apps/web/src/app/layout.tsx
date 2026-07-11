@@ -20,6 +20,15 @@ export const metadata: Metadata = {
   },
   description:
     "Research-first studio that turns live engineering signal into X and LinkedIn posts—one due slot at a time, with human approval and manual posting.",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({
