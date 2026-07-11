@@ -1,6 +1,7 @@
 import { readdir, stat, unlink } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/db";
+import { deleteOldR2Screenshots, isR2Configured } from "@/lib/storage/r2";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const POST_RETENTION_DAYS = 30;
@@ -63,7 +64,17 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     // table may be empty / fine
   }
 
-  const screenshotsDeleted = await cleanupOldScreenshots(SCREENSHOT_RETENTION_DAYS, log);
+  let screenshotsDeleted = await cleanupOldScreenshots(SCREENSHOT_RETENTION_DAYS, log);
+
+  if (isR2Configured()) {
+    try {
+      const r2Deleted = await deleteOldR2Screenshots(SCREENSHOT_RETENTION_DAYS * DAY_MS);
+      screenshotsDeleted += r2Deleted;
+      log(`Deleted ${r2Deleted} R2 screenshot object(s) older than ${SCREENSHOT_RETENTION_DAYS} day(s)`);
+    } catch (err) {
+      log(`R2 screenshot cleanup failed: ${err instanceof Error ? err.message : "error"}`);
+    }
+  }
 
   // Lightweight keep-alive touch (helps free-tier "activity")
   await prisma.user.count();
