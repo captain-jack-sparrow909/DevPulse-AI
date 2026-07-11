@@ -16,11 +16,14 @@ export default async function DashboardPage() {
   const userId = session.user.id;
   await promoteDuePosts(userId);
 
-  const [total, pending, ready, posted, recent, lastJob, sourceCount] = await Promise.all([
+  // Sequential-ish batches avoid pool exhaustion on small Supabase free-tier pools
+  const [total, pending, ready, posted] = await Promise.all([
     prisma.post.count({ where: { userId } }),
     prisma.post.count({ where: { userId, status: "pending_review" } }),
     prisma.post.count({ where: { userId, status: "ready" } }),
     prisma.post.count({ where: { userId, status: "posted_manually" } }),
+  ]);
+  const [recent, lastJob, sourceCount] = await Promise.all([
     prisma.post.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
