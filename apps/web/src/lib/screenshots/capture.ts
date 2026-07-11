@@ -54,6 +54,16 @@ export async function capturePageScreenshot(
     // need to capture
   }
 
+  // Vercel serverless cannot run full Chromium; skip gracefully there.
+  if (process.env.VERCEL === "1" || process.env.DISABLE_SCREENSHOTS === "1") {
+    return {
+      ok: false,
+      sourceUrl: url,
+      error: "Screenshots disabled on this host (use local dev for Playwright captures)",
+      skipped: true,
+    };
+  }
+
   try {
     const { chromium } = await import("playwright");
     const browser = await chromium.launch({
