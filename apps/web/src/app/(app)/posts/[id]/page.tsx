@@ -1,0 +1,222 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { requireUser } from "@/lib/session";
+import { prisma } from "@/lib/db";
+import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PostActions } from "@/components/post-actions";
+import { parseJsonArray } from "@/lib/utils";
+import { format } from "date-fns";
+import { promoteDuePosts } from "@/lib/schedule/promote-ready";
+
+export default async function PostDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const session = await requireUser();
+  await promoteDuePosts(session.user.id);
+  const { id } = await params;
+
+  const post = await prisma.post.findFirst({
+    where: { id, userId: session.user.id },
+    include: {
+      schedule: true,
+      topic: true,
+      writingStyle: true,
+      sources: { include: { source: true } },
+      readinessJobs: true,
+    },
+  });
+  if (!post) notFound();
+
+  const citations = parseJsonArray<{ title: string; url: string; provider?: string }>(
+    post.citationsJson,
+  );
+
+  const scores = [
+    ["Overall", post.scoreOverall],
+    ["Novelty", post.scoreNovelty],
+    ["Accuracy", post.scoreAccuracy],
+    ["Hook", post.scoreHook],
+    ["Readability", post.scoreReadability],
+    ["Virality", post.scoreVirality],
+    ["Technical", post.scoreTechnical],
+    ["Engagement", post.scoreEngagement],
+  ] as const;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <Link href="/posts" className="text-xs text-zinc-500 hover:text-zinc-300">
+          ← Back to posts
+        </Link>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <StatusBadge status={post.status} />
+          <Badge className="border-zinc-700 bg-zinc-800/60 text-zinc-300">
+            {post.platform === "x" ? "X / Twitter" : "LinkedIn"}
+          </Badge>
+          {post.format && (
+            <Badge className="border-zinc-700 bg-zinc-800/40 text-zinc-400">{post.format}</Badge>
+          )}
+          {post.angle && (
+            <Badge className="border-violet-500/20 bg-violet-500/10 text-violet-300">
+              {post.angle}
+            </Badge>
+          )}
+          {post.needsImage && (
+            <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+              {post.imagePath ? "Has image" : "Image intended"}
+            </Badge>
+          )}
+        </div>
+        <h1 className="mt-3 text-2xl font-semibold text-zinc-50">
+          {post.title || "Untitled post"}
+        </h1>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Review & prepare for manual post</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PostActions
+              postId={post.id}
+              status={post.status}
+              initialContent={post.content}
+              imagePath={post.imagePath}
+              platform={post.platform}
+            />
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Screenshot</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {post.imagePath ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={post.imagePath}
+                    alt={post.imageCaption || "Source screenshot"}
+                    className="w-full rounded-lg border border-zinc-800"
+                  />
+                  <p className="text-xs text-zinc-500">{post.imageCaption}</p>
+                  <a
+                    href={post.imagePath}
+                    download
+                    className="inline-block text-sm text-cyan-400 hover:underline"
+                  >
+                    Download image for upload
+                  </a>
+                  {post.imageSourceUrl && (
+                    <a
+                      href={post.imageSourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block text-xs text-zinc-500 hover:text-zinc-300"
+                    >
+                      Captured from source →
+                    </a>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-zinc-500">
+                  {post.imageSkipReason ||
+                    "No screenshot for this post (text-only is fine for many angles)."}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Quality scores</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {scores.map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between text-sm">
+                  <span className="text-zinc-500">{label}</span>
+                  <span className="tabular-nums text-zinc-200">
+                    {value != null ? value.toFixed(1) : "—"}
+                  </span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Meta</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-zinc-400">
+              <div>
+                Topic:{" "}
+                <span className="text-zinc-200">{post.topic?.name || "—"}</span>
+              </div>
+              <div>
+                Style:{" "}
+                <span className="text-zinc-200">{post.writingStyle?.name || "—"}</span>
+              </div>
+              {post.schedule && (
+                <div>
+                  Ready by:{" "}
+                  <span className="text-zinc-200">
+                    {format(post.schedule.scheduledFor, "MMM d, yyyy h:mm a")} (slot{" "}
+                    {post.schedule.slotIndex + 1})
+                  </span>
+                </div>
+              )}
+              {post.postedManuallyAt && (
+                <div className="text-violet-300">
+                  Marked posted: {format(post.postedManuallyAt, "MMM d, h:mm a")}
+                </div>
+              )}
+              {post.rejectionReason && (
+                <div className="text-rose-400">Rejected: {post.rejectionReason}</div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Sources / citations</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {citations.length === 0 && post.sources.length === 0 && (
+                <p className="text-sm text-zinc-500">No citations attached.</p>
+              )}
+              {citations.map((c) => (
+                <a
+                  key={c.url}
+                  href={c.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-sm text-cyan-400 hover:underline"
+                >
+                  {c.title}
+                </a>
+              ))}
+              {post.sources.map((ps) => (
+                <a
+                  key={ps.sourceId}
+                  href={ps.source.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-sm text-cyan-400 hover:underline"
+                >
+                  [{ps.source.provider}] {ps.source.title}
+                </a>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

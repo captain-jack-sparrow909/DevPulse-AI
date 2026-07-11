@@ -1,0 +1,292 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Better Auth tables ───────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  posts         Post[]
+  researchRuns  ResearchRun[]
+  generationJobs GenerationJob[]
+  topics        Topic[]
+  writingStyles WritingStyle[]
+  modelConfigs  ModelConfig[]
+  settings      UserSettings?
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ─── Domain ───────────────────────────────────────────────────────
+
+model UserSettings {
+  id                String  @id @default(cuid())
+  userId            String  @unique
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timezone          String  @default("Asia/Dubai")
+  postsPerDay       Int     @default(12)
+  qualityThreshold  Float   @default(8.0)
+  firstPostHour     Int     @default(6)
+  lastPostHour      Int     @default(21)
+  defaultPlatforms  String  @default("x,linkedin") // comma-separated
+  autoGenerate      Boolean @default(false)
+}
+
+model Topic {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  slug        String
+  description String?
+  keywords    String   @default("") // comma-separated
+  active      Boolean  @default(true)
+  weight      Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  posts       Post[]
+
+  @@unique([userId, slug])
+  @@index([userId, active])
+}
+
+model WritingStyle {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  isDefault    Boolean  @default(false)
+  systemPrompt String
+  rules        String   @default("") // newline-separated rules
+  examples     String   @default("") // few-shot examples
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  posts        Post[]
+}
+
+model ModelConfig {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  provider    String   @default("deepseek")
+  model       String   @default("deepseek-chat")
+  baseUrl     String   @default("https://api.deepseek.com")
+  temperature Float    @default(0.7)
+  maxTokens   Int      @default(2048)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Source {
+  id          String   @id @default(cuid())
+  provider    String // hackernews | github | arxiv | reddit | rss
+  externalId  String
+  title       String
+  url         String
+  summary     String?
+  score       Float    @default(0)
+  rawJson     String? // stored JSON
+  fetchedAt   DateTime @default(now())
+  researchRunId String?
+  researchRun ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+  posts       PostSource[]
+
+  @@unique([provider, externalId])
+  @@index([fetchedAt])
+  @@index([researchRunId])
+}
+
+model ResearchRun {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      String   @default("pending") // pending | running | completed | failed
+  sourcesFound Int     @default(0)
+  topicsRanked String? // JSON array of ranked topics
+  error       String?
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  sources     Source[]
+  posts       Post[]
+  generationJobs GenerationJob[]
+}
+
+model Post {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform        String // x | linkedin
+  format          String   @default("single") // single | thread | poll | longform | tip | comparison
+  title           String?
+  content         String
+  threadJson      String? // JSON array of thread parts
+  status          String   @default("draft") // draft | pending_review | approved | scheduled | ready | posted_manually | rejected | failed
+  contentHash     String
+  topicId         String?
+  topic           Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  writingStyleId  String?
+  writingStyle    WritingStyle? @relation(fields: [writingStyleId], references: [id], onDelete: SetNull)
+  researchRunId   String?
+  researchRun     ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+  angle           String?
+  hook            String?
+  // Optional screenshot for manual attach when posting on X/LinkedIn
+  needsImage      Boolean  @default(false)
+  imagePath       String? // public-relative path e.g. /screenshots/abc.png
+  imageSourceUrl  String? // page that was captured
+  imageCaption    String?
+  imageSkipReason String? // why no image was attached
+  // Quality scores 0-10
+  scoreNovelty    Float?
+  scoreAccuracy   Float?
+  scoreHook       Float?
+  scoreReadability Float?
+  scoreVirality   Float?
+  scoreTechnical  Float?
+  scoreEngagement Float?
+  scoreOverall    Float?
+  citationsJson   String? // JSON array of {title,url}
+  rejectionReason String?
+  postedManuallyAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  sources         PostSource[]
+  schedule        Schedule?
+  readinessJobs   ReadinessJob[]
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@index([contentHash])
+  @@index([platform])
+}
+
+model PostSource {
+  postId   String
+  sourceId String
+  post     Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  source   Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@id([postId, sourceId])
+}
+
+model Schedule {
+  id          String   @id @default(cuid())
+  postId      String   @unique
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  scheduledFor DateTime
+  slotIndex   Int // 0-11 for the 12 daily slots
+  status      String   @default("pending") // pending | ready | posted_manually | cancelled | missed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([scheduledFor, status])
+}
+
+/// Tracks human approval + readiness for manual posting (never auto-posts to social APIs).
+model ReadinessJob {
+  id          String   @id @default(cuid())
+  postId      String
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform    String
+  status      String   @default("awaiting_approval") // awaiting_approval | approved | ready | posted_manually | cancelled
+  approvedAt  DateTime?
+  readyAt     DateTime?
+  postedAt    DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+}
+
+model GenerationJob {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  researchRunId String?
+  researchRun   ResearchRun? @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+  status        String   @default("pending") // pending | researching | planning | writing | scoring | scheduling | completed | failed
+  targetCount   Int      @default(12)
+  producedCount Int      @default(0)
+  logsJson      String   @default("[]")
+  error         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  completedAt   DateTime?
+
+  @@index([userId, status])
+}
+
+model PromptVersion {
+  id        String   @id @default(cuid())
+  key       String // writer | editor | scorer | planner
+  version   Int
+  content   String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([key, version])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  postId    String?
+  platform  String
+  metric    String // likes | reposts | replies | impressions | clicks
+  value     Float
+  recordedAt DateTime @default(now())
+
+  @@index([postId])
+  @@index([recordedAt])
+}
