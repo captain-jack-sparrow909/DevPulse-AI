@@ -74,11 +74,11 @@ export function GeneratePanel({
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Generate due slot (1 post)</CardTitle>
+          <CardTitle>Manual override (1 post)</CardTitle>
           <CardDescription>
-            Posts are created <strong className="text-zinc-300">one at a time</strong> when each
-            daily slot is due (6:00 → 21:00). Each run re-researches live sources so a story that
-            breaks at 3pm can appear in the afternoon slot — not tomorrow.
+            <strong className="text-zinc-300">Cron already generates</strong> each due slot
+            automatically (6:00 → 21:00 UAE). Use this only if a tick failed or you want to draft
+            early. You still approve and post yourself — generation never waits for a button click.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -160,14 +160,15 @@ export function GeneratePanel({
           </div>
 
           <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2 text-xs text-violet-100/90">
-            <strong className="text-violet-200">Cron:</strong> call{" "}
-            <code className="text-violet-100">GET /api/cron/slot</code> every ~15 minutes (see
-            vercel.json or system crontab). Each tick creates at most one post per user for the
-            earliest due empty slot.
+            <strong className="text-violet-200">Automatic:</strong> external cron hits{" "}
+            <code className="text-violet-100">GET /api/cron/slot</code> every ~15 minutes. The
+            endpoint returns <strong className="text-violet-100">202 in under a second</strong>{" "}
+            (works with cron-job.org’s 30s max timeout); generation continues on Vercel for up to
+            ~60s. Each tick fills the <em>current</em> due slot only and auto-skips older misses.
           </div>
 
-          <Button onClick={run} disabled={loading} size="lg" className="w-full sm:w-auto">
-            {loading ? "Researching + writing this slot…" : "Generate due slot now"}
+          <Button onClick={run} disabled={loading} size="lg" className="w-full sm:w-auto" variant="secondary">
+            {loading ? "Researching + writing this slot…" : "Run override now"}
           </Button>
 
           {error && <p className="text-sm text-rose-400">{error}</p>}

@@ -68,7 +68,7 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000).
 
 1. **Register** an account  
-2. Run cron (below) **or** open **Generate → Generate due slot now**  
+2. Run cron (below) so slots auto-generate — **Generate** is only a manual override  
 3. Each due slot produces **one** post with **live** research  
 4. **Posts** → review / edit → **Approve for slot**  
 5. When **Ready to post**: **Copy for manual post**, download screenshot if any, post on X/LinkedIn yourself  

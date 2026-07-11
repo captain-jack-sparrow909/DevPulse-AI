@@ -90,14 +90,18 @@ GET https://YOUR-APP.vercel.app/api/cron/slot
 Authorization: Bearer YOUR_CRON_SECRET
 ```
 
-Each call:
-1. Deletes posts/research older than **30 days**
-2. Screenshot cleanup (no-op on serverless disk)
+Each call (order matters for the 60s budget):
+1. Generates **at most one** dual pack for the **latest** due empty slot (current wall-clock window)
+2. Auto-skips older empty due slots so work never backfills into a later slot
 3. Promotes due approved posts → `ready`
-4. Generates **at most one** dual pack (LinkedIn + X) for the next due empty slot
+4. Deletes posts/research older than **30 days** + screenshot cleanup
 5. Touches Supabase so free DB stays active
 
+**Default is async (HTTP 202 in under 1s)** so free schedulers with a **30s request timeout** (e.g. cron-job.org) succeed. Generation continues on Vercel via `waitUntil` for up to ~60s after the response. Do **not** set `CRON_SYNC=1` in production with a 30s client timeout — the HTTP kill can cut off a sync run.
+
 ### Option A — cron-job.org (free, recommended)
+
+cron-job.org free plan max request timeout is **30 seconds**. That is fine: our endpoint returns **202** immediately; research+LLM keeps running on Vercel.
 
 1. Sign up at [https://cron-job.org](https://cron-job.org)
 2. **Create cronjob**
@@ -110,19 +114,18 @@ Each call:
 | Schedule | Every **15 minutes** (or every 10–20 min) |
 | Request method | **GET** |
 | Headers | `Authorization` = `Bearer YOUR_CRON_SECRET` (same as Vercel env) |
+| Request timeout | **30s** (max on free plan — OK, response is instant 202) |
 | Enable job | On |
 
 4. Save → **Run now** once to test  
-5. Expect a **fast** response: HTTP **202** with `{ "ok": true, "accepted": true, ... }`  
-   (Work continues on Vercel for up to ~60s. cron-job.org often times out if it waits for the full research+LLM run.)  
-6. Confirm in **Vercel → Logs** that the request is **200/202** and later log lines show `background ok`  
-7. Check **Posts** in the app for a new pack when a slot is due  
+5. Expect HTTP **202** with `{ "ok": true, "accepted": true, ... }` in well under 30s  
+6. Confirm in **Vercel → Logs** a later line: `[cron/slot] background ok: created=…`  
+7. Check **Posts** a minute later for a new pack when a slot is due — no Generate click needed  
 
-Optional: increase cron-job.org **timeout** to 90s+ if the UI offers it (not required with the 202 quick-ack).
+Optional query fallback if custom headers are awkward:  
+`https://YOUR-APP.vercel.app/api/cron/slot?secret=YOUR_CRON_SECRET`
 
-Optional: also set query fallback  
-`https://YOUR-APP.vercel.app/api/cron/slot?secret=YOUR_CRON_SECRET`  
-(if the service makes custom headers awkward).
+Local debug only: `?wait=1` or env `CRON_SYNC=1` waits for full generation (not for cron-job.org).
 
 ### Option B — EasyCron / cron-job.net / GitHub Actions
 

@@ -11,9 +11,15 @@ import {
   buildSlotPlan,
   dayBoundsUtc,
   formatSlotDateTime,
-  pickNextMissingDueSlot,
+  listAllMissedDueSlots,
+  listMissedDueSlotsBefore,
+  pickLatestMissingDueSlot,
 } from "@/lib/schedule/slots";
-import { clearSlotForRegenerate, getOccupiedSlotIndexes } from "@/lib/schedule/slot-actions";
+import {
+  clearSlotForRegenerate,
+  getOccupiedSlotIndexes,
+  skipSlot,
+} from "@/lib/schedule/slot-actions";
 import { capturePageScreenshot, shouldIncludeImage } from "@/lib/screenshots/capture";
 import {
   enforceXLimit,
@@ -23,7 +29,7 @@ import {
 
 export interface PipelineOptions {
   userId: string;
-  /** Force a specific slot (0–11). If omitted, picks the earliest due unfilled slot. */
+  /** Force a specific slot (0–11). If omitted, picks the latest due unfilled slot. */
   slotIndex?: number;
   /**
    * If true, generate even when the slot time has not arrived yet
@@ -32,7 +38,7 @@ export interface PipelineOptions {
   allowEarly?: boolean;
   /**
    * Clear any existing post for the target slot today, then generate a fresh one.
-   * Requires slotIndex (or regenerates the earliest due occupied slot when combined with logic below).
+   * Requires slotIndex (explicit target).
    */
   regenerate?: boolean;
   platforms?: Array<"x" | "linkedin">;
@@ -267,10 +273,13 @@ export async function ensureUserDefaults(userId: string) {
 }
 
 /**
- * Generate exactly ONE post for the next due calendar slot.
+ * Generate exactly ONE post for the latest due calendar slot.
  *
  * Why not 12 at once? Later slots re-run research so midday trends appear
  * the same day instead of waiting until tomorrow.
+ *
+ * Missed older due slots are auto-skipped so work never spills into the next
+ * wall-clock window (approve/post is manual; generation is automatic via cron).
  */
 export async function runDueSlotGeneration(options: PipelineOptions): Promise<PipelineResult> {
   const logs: string[] = [];
@@ -361,7 +370,8 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     slotIndex = options.slotIndex;
     scheduledFor = slotTime;
   } else {
-    const missing = pickNextMissingDueSlot(plan, filled);
+    // Current wall-clock window only — never backfill an older empty slot into "now"
+    const missing = pickLatestMissingDueSlot(plan, filled);
     if (!missing) {
       // Optional: draft the next upcoming unfilled slot before its due time
       if (options.allowEarly) {
@@ -409,7 +419,30 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           scheduledFor: plan.nextUpcomingAt?.toISOString(),
         };
       } else {
-        log(logs, `All due slots for today are already filled (${filled.size}/${plan.postsPerDay})`, options.onLog);
+        // Current window already has a post — still mark older empty due slots as missed
+        const backlog = listAllMissedDueSlots(plan, filled);
+        for (const missedIdx of backlog) {
+          try {
+            await skipSlot(
+              options.userId,
+              missedIdx,
+              "Missed window — auto-skipped (current due slot already filled)",
+            );
+            filled.add(missedIdx);
+            log(logs, `Auto-skipped missed slot ${missedIdx + 1}`, options.onLog);
+          } catch (err) {
+            log(
+              logs,
+              `Could not auto-skip slot ${missedIdx + 1}: ${err instanceof Error ? err.message : "error"}`,
+              options.onLog,
+            );
+          }
+        }
+        log(
+          logs,
+          `Current due slot already filled (${filled.size}/${plan.postsPerDay} occupied today)`,
+          options.onLog,
+        );
         return {
           jobId: null,
           researchRunId: null,
@@ -417,12 +450,36 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           sourcesFound: 0,
           logs,
           skipped: true,
-          skipReason: "All due slots already have posts for today",
+          skipReason: "Current due slot already has a post — waiting for the next slot",
         };
       }
     } else {
       slotIndex = missing.slotIndex;
       scheduledFor = missing.scheduledFor;
+
+      // Auto-skip older empty due slots so creation never spills into a later window
+      const missed = listMissedDueSlotsBefore(plan, filled, slotIndex);
+      for (const missedIdx of missed) {
+        try {
+          await skipSlot(
+            options.userId,
+            missedIdx,
+            `Missed window — auto-skipped so slot ${slotIndex + 1} stays on schedule`,
+          );
+          filled.add(missedIdx);
+          log(
+            logs,
+            `Auto-skipped missed slot ${missedIdx + 1} (window closed; generating current slot ${slotIndex + 1} only)`,
+            options.onLog,
+          );
+        } catch (err) {
+          log(
+            logs,
+            `Could not auto-skip slot ${missedIdx + 1}: ${err instanceof Error ? err.message : "error"}`,
+            options.onLog,
+          );
+        }
+      }
     }
   }
 

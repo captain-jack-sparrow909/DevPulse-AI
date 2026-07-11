@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { formatDistanceToNow } from "date-fns";
 import { getTodaySlotRows } from "@/lib/schedule/slot-actions";
-import { formatSlotDateTime, pickNextMissingDueSlot } from "@/lib/schedule/slots";
+import { formatSlotDateTime, pickLatestMissingDueSlot } from "@/lib/schedule/slots";
 
 export default async function GeneratePage() {
   const session = await requireUser();
@@ -15,7 +15,7 @@ export default async function GeneratePage() {
   const { plan, slots } = await getTodaySlotRows(userId);
 
   const filled = new Set(slots.filter((s) => s.isFilled).map((s) => s.slotIndex));
-  const nextMissing = pickNextMissingDueSlot(plan, filled);
+  const nextMissing = pickLatestMissingDueSlot(plan, filled);
 
   const jobs = await prisma.generationJob.findMany({
     where: { userId },
@@ -28,7 +28,7 @@ export default async function GeneratePage() {
       <PageHeader
         kicker="Pipeline"
         title="Generate"
-        description={`One post per due slot · skip or regenerate · ${plan.timezone}`}
+        description={`Auto via cron · manual override only · skip or regenerate · ${plan.timezone}`}
       />
 
       <GeneratePanel

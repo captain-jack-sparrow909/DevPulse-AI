@@ -49,18 +49,23 @@ export default async function DashboardPage() {
       <PageHeader
         kicker="Overview"
         title={`Welcome back, ${session.user.name?.split(" ")[0] || "there"}`}
-        description="One fresh post per due slot — research first, then you approve and post manually on X & LinkedIn."
+        description="Cron auto-generates one post per due slot. You only approve and post manually on X & LinkedIn — generation does not wait for you."
         actions={
           <>
-            <Link href="/generate" className="w-full sm:w-auto">
+            <Link href="/posts?status=pending_review" className="w-full sm:w-auto">
               <Button className="w-full sm:w-auto">
-                Generate due slot
+                Review queue
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
             <Link href="/posts?status=ready" className="w-full sm:w-auto">
               <Button variant="secondary" className="w-full sm:w-auto">
-                Ready queue
+                Ready to post
+              </Button>
+            </Link>
+            <Link href="/generate" className="w-full sm:w-auto">
+              <Button variant="ghost" className="w-full sm:w-auto text-zinc-400">
+                Manual override
               </Button>
             </Link>
           </>
@@ -102,10 +107,13 @@ export default async function DashboardPage() {
               <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center">
                 <p className="text-sm text-zinc-400">No posts yet.</p>
                 <p className="mt-1 text-xs text-zinc-600">
-                  Run a due-slot generation to research trends and draft content.
+                  External cron fills each due slot automatically. When a draft appears here, review
+                  and post it yourself.
                 </p>
                 <Link href="/generate" className="mt-4 inline-block">
-                  <Button size="sm">Generate first slot</Button>
+                  <Button size="sm" variant="secondary">
+                    Manual override
+                  </Button>
                 </Link>
               </div>
             )}
@@ -178,8 +186,9 @@ export default async function DashboardPage() {
               <CardDescription className="mt-1">12 slots · 06:00–21:00 · Asia/Dubai</CardDescription>
             </div>
             <CardContent className="text-sm leading-relaxed text-zinc-400">
-              Cron generates <span className="text-zinc-200">one post per slot</span> with fresh
-              research. Approve, copy text + screenshot, post yourself — never auto-published.
+              Cron generates <span className="text-zinc-200">one post for the current due slot</span>{" "}
+              with fresh research. Missed earlier slots are auto-skipped (no backfill spillover).
+              Approve, copy text + screenshot, post yourself — never auto-published.
             </CardContent>
           </Card>
         </div>

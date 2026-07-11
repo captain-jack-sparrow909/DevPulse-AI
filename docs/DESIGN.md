@@ -57,7 +57,7 @@ Do **not** generate all 12 posts at 6:00. Each slot triggers its own research + 
 3. Exactly **one** post is written for that slot  
 4. Later slots re-research so afternoon news can appear the same day  
 
-Endpoint: `GET/POST /api/cron/slot` (protected by `CRON_SECRET`). Manual: **Generate → Generate due slot now**.
+Endpoint: `GET/POST /api/cron/slot` (protected by `CRON_SECRET`). Fills the **latest** due empty slot; older misses are auto-skipped. Manual override: **Generate** page (not required for normal operation).
 
 ---
 
