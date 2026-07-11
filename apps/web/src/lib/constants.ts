@@ -48,6 +48,7 @@ export const POST_STATUSES = [
   "scheduled",
   "ready",
   "posted_manually",
+  "skipped",
   "rejected",
   "failed",
 ] as const;
@@ -64,19 +65,21 @@ export const STATUS_LABELS: Record<string, string> = {
   scheduled: "Scheduled",
   ready: "Ready to post",
   posted_manually: "Posted (manual)",
-  published: "Posted (manual)", // legacy
+  published: "Posted (manual)",
+  skipped: "Skipped",
   rejected: "Rejected",
   failed: "Failed",
 };
 
 export const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
-  pending_review: "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  approved: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  scheduled: "bg-sky-500/15 text-sky-300 border-sky-500/30",
-  ready: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30",
-  posted_manually: "bg-violet-500/15 text-violet-300 border-violet-500/30",
-  published: "bg-violet-500/15 text-violet-300 border-violet-500/30",
-  rejected: "bg-rose-500/15 text-rose-300 border-rose-500/30",
-  failed: "bg-red-500/15 text-red-300 border-red-500/30",
+  draft: "border-zinc-500/25 bg-zinc-500/10 text-zinc-300",
+  pending_review: "border-amber-400/25 bg-amber-400/10 text-amber-200",
+  approved: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
+  scheduled: "border-sky-400/25 bg-sky-400/10 text-sky-200",
+  ready: "border-teal-400/30 bg-teal-400/12 text-teal-200",
+  posted_manually: "border-violet-400/25 bg-violet-400/10 text-violet-200",
+  published: "border-violet-400/25 bg-violet-400/10 text-violet-200",
+  skipped: "border-zinc-500/20 bg-zinc-500/10 text-zinc-400",
+  rejected: "border-rose-400/25 bg-rose-400/10 text-rose-200",
+  failed: "border-red-400/25 bg-red-400/10 text-red-200",
 };

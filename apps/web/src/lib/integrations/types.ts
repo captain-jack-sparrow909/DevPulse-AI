@@ -1,4 +1,15 @@
-export type ResearchProvider = "hackernews" | "github" | "arxiv" | "reddit" | "rss" | "x";
+export type ResearchProvider =
+  | "hackernews"
+  | "github"
+  | "arxiv"
+  | "reddit"
+  | "rss"
+  | "x"
+  | "huggingface"
+  | "stackoverflow"
+  | "devto"
+  | "producthunt"
+  | "tavily";
 
 export interface RawSourceItem {
   provider: ResearchProvider;
@@ -7,5 +18,7 @@ export interface RawSourceItem {
   url: string;
   summary?: string;
   score?: number;
+  /** Priority weight from catalog (higher = preferred). */
+  priority?: number;
   raw?: unknown;
 }

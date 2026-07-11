@@ -21,9 +21,11 @@ export default async function SchedulePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-50">Schedule</h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          12 daily slots from 6:00 to 21:00. When a slot is due, the post becomes ready for you to post manually.
+        <div className="page-kicker mb-2">Calendar</div>
+        <h1 className="page-title">Schedule</h1>
+        <p className="page-subtitle">
+          12 daily slots from 6:00 to 21:00. When a slot is due, the post becomes ready for you to
+          post manually.
         </p>
       </div>
 
@@ -43,7 +45,7 @@ export default async function SchedulePage() {
             <Link
               key={slot.id}
               href={`/posts/${slot.postId}`}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3 transition hover:border-zinc-700"
+              className="list-row flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -53,12 +55,11 @@ export default async function SchedulePage() {
                   <Badge className="border-zinc-700 bg-zinc-800/50 text-zinc-400">
                     slot {slot.slotIndex + 1}/12
                   </Badge>
-                  <Badge className="border-zinc-700 bg-zinc-800/50 text-zinc-300">
-                    {slot.post.platform === "x" ? "X" : "LinkedIn"}
-                  </Badge>
+                  <Badge className="border-sky-400/20 bg-sky-400/10 text-sky-200">LinkedIn</Badge>
+                  <Badge className="border-white/10 bg-white/[0.04] text-zinc-300">X</Badge>
                   <StatusBadge status={slot.post.status} />
                 </div>
-                <p className="mt-1 truncate text-sm text-zinc-300">
+                <p className="mt-1 line-clamp-2 text-sm text-zinc-300 sm:truncate sm:line-clamp-none">
                   {slot.post.title || slot.post.content.slice(0, 100)}
                 </p>
               </div>

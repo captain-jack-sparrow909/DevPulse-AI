@@ -3,13 +3,17 @@ import type { RawSourceItem } from "./types";
 /**
  * arXiv API — free Atom feed search for recent AI/ML papers.
  */
-export async function fetchArxiv(limit = 12): Promise<RawSourceItem[]> {
+/** Categories from information-sources.md: cs.AI, cs.LG, cs.CL, cs.CV, cs.RO */
+export async function fetchArxiv(limit = 14): Promise<RawSourceItem[]> {
   try {
-    const query = encodeURIComponent("cat:cs.AI OR cat:cs.LG OR cat:cs.CL");
+    const query = encodeURIComponent(
+      "cat:cs.AI OR cat:cs.LG OR cat:cs.CL OR cat:cs.CV OR cat:cs.RO",
+    );
     const url = `https://export.arxiv.org/api/query?search_query=${query}&sortBy=submittedDate&sortOrder=descending&max_results=${limit}`;
     const res = await fetch(url, {
       headers: { "User-Agent": "DevPulse-AI/1.0" },
       next: { revalidate: 600 },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return [];
     const xml = await res.text();
@@ -23,14 +27,18 @@ export async function fetchArxiv(limit = 12): Promise<RawSourceItem[]> {
         entry.match(/<link[^>]*href="([^"]+)"[^>]*rel="alternate"/)?.[1] ||
         entry.match(/<id>([^<]+)<\/id>/)?.[1] ||
         id;
+      const absId = id
+        .replace("http://arxiv.org/abs/", "")
+        .replace("https://arxiv.org/abs/", "");
 
       return {
         provider: "arxiv" as const,
-        externalId: id.replace("http://arxiv.org/abs/", "").replace("https://arxiv.org/abs/", ""),
-        title,
-        url: link.startsWith("http") ? link : `https://arxiv.org/abs/${id}`,
+        externalId: absId,
+        title: `arXiv: ${title}`,
+        url: link.startsWith("http") ? link : `https://arxiv.org/abs/${absId}`,
         summary,
-        score: 50,
+        score: 55,
+        priority: 5,
         raw: { id, title },
       };
     });

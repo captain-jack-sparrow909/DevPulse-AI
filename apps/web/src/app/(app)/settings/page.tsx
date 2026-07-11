@@ -20,8 +20,9 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-50">Settings</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <div className="page-kicker mb-2">Preferences</div>
+        <h1 className="page-title">Settings</h1>
+        <p className="page-subtitle">
           Topics, writing style, model config, and daily cadence.
         </p>
       </div>

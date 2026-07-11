@@ -1,14 +1,8 @@
 import type { RawSourceItem } from "./types";
 
 /**
- * X (Twitter) research-only integration.
- *
- * IMPORTANT: DevPulse NEVER posts to X via API.
- * X posting is always manual by the user.
- * Credentials (if present) are used only to fetch public conversation/search signals.
- *
- * Supports Bearer token (app-only) via X_BEARER_TOKEN preferred,
- * or falls back to skipping when only write-oriented keys exist.
+ * X (Twitter) research-only — never posts.
+ * Uses X_BEARER_TOKEN (app-only). Keep volume low (paid API).
  */
 export async function fetchXResearch(limit = 10): Promise<RawSourceItem[]> {
   const bearer =
@@ -16,37 +10,29 @@ export async function fetchXResearch(limit = 10): Promise<RawSourceItem[]> {
     process.env.TWITTER_BEARER_TOKEN?.trim() ||
     "";
 
-  // Some setups put a read token in X_API_KEY — only use it if it looks like a bearer (not xai- LLM keys)
-  const maybeKey = process.env.X_API_KEY?.trim() || "";
-  const token =
-    bearer ||
-    (maybeKey && !maybeKey.startsWith("xai-") && maybeKey.length > 20 ? maybeKey : "");
-
-  if (!token) {
+  if (!bearer) {
     return [];
   }
 
+  const maxResults = Math.min(Math.max(limit, 10), 20); // API requires 10–100
   const query = encodeURIComponent(
-    "(AI OR LLM OR TypeScript OR Kubernetes OR \"open source\") -is:retweet lang:en",
+    "(AI OR LLM OR TypeScript OR Kubernetes OR \"open source\" OR HuggingFace) -is:retweet lang:en",
   );
 
   try {
     const res = await fetch(
-      `https://api.twitter.com/2/tweets/search/recent?query=${query}&max_results=${Math.min(
-        limit,
-        10,
-      )}&tweet.fields=public_metrics,created_at&expansions=author_id`,
+      `https://api.twitter.com/2/tweets/search/recent?query=${query}&max_results=${maxResults}&tweet.fields=public_metrics,created_at`,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${bearer}`,
           "User-Agent": "DevPulse-AI-Research/1.0",
         },
         next: { revalidate: 900 },
+        signal: AbortSignal.timeout(12_000),
       },
     );
 
     if (!res.ok) {
-      // Paid/restricted endpoints should fail quietly — other free sources still work
       return [];
     }
 
@@ -66,6 +52,7 @@ export async function fetchXResearch(limit = 10): Promise<RawSourceItem[]> {
       summary: t.text,
       score:
         (t.public_metrics?.like_count || 0) + (t.public_metrics?.retweet_count || 0) * 2,
+      priority: 3,
       raw: t,
     }));
   } catch {

@@ -1,39 +1,20 @@
 import { requireUser } from "@/lib/session";
 import { GeneratePanel } from "@/components/generate-panel";
+import { SlotBoard } from "@/components/slot-board";
 import { isAiConfigured } from "@/lib/ai/client";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/page-header";
 import { formatDistanceToNow } from "date-fns";
-import { ensureUserDefaults } from "@/lib/ai/pipeline";
-import {
-  buildSlotPlan,
-  dayBoundsUtc,
-  formatSlotDateTime,
-  pickNextMissingDueSlot,
-} from "@/lib/schedule/slots";
+import { getTodaySlotRows } from "@/lib/schedule/slot-actions";
+import { formatSlotDateTime, pickNextMissingDueSlot } from "@/lib/schedule/slots";
 
 export default async function GeneratePage() {
   const session = await requireUser();
   const userId = session.user.id;
-  const settings = await ensureUserDefaults(userId);
-  const now = new Date();
-  const plan = buildSlotPlan(
-    now,
-    settings.timezone,
-    settings.firstPostHour,
-    settings.lastPostHour,
-    settings.postsPerDay,
-  );
-  const { start, end } = dayBoundsUtc(now, settings.timezone);
-  const todaySchedules = await prisma.schedule.findMany({
-    where: {
-      scheduledFor: { gte: start, lte: end },
-      post: { userId },
-      status: { not: "cancelled" },
-    },
-    select: { slotIndex: true },
-  });
-  const filled = new Set(todaySchedules.map((s) => s.slotIndex));
+  const { plan, slots } = await getTodaySlotRows(userId);
+
+  const filled = new Set(slots.filter((s) => s.isFilled).map((s) => s.slotIndex));
   const nextMissing = pickNextMissingDueSlot(plan, filled);
 
   const jobs = await prisma.generationJob.findMany({
@@ -44,19 +25,18 @@ export default async function GeneratePage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-zinc-50">Generate</h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          One post per due slot · fresh research each time · {settings.timezone}
-        </p>
-      </div>
+      <PageHeader
+        kicker="Pipeline"
+        title="Generate"
+        description={`One post per due slot · skip or regenerate · ${plan.timezone}`}
+      />
 
       <GeneratePanel
         aiReady={isAiConfigured()}
         slotSummary={{
-          timezone: settings.timezone,
+          timezone: plan.timezone,
           filledToday: filled.size,
-          postsPerDay: settings.postsPerDay,
+          postsPerDay: plan.postsPerDay,
           nextDueLabel: nextMissing
             ? `Slot ${nextMissing.slotIndex + 1} · ${formatSlotDateTime(nextMissing.scheduledFor, plan.timezone)}`
             : null,
@@ -67,41 +47,20 @@ export default async function GeneratePage() {
         }}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Today&apos;s slot board</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {plan.slots.map((slotAt, i) => {
-              const isFilled = filled.has(i);
-              const isDue = plan.dueSlotIndexes.includes(i);
-              return (
-                <div
-                  key={i}
-                  className={`rounded-lg border px-3 py-2 text-sm ${
-                    isFilled
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"
-                      : isDue
-                        ? "border-amber-500/30 bg-amber-500/10 text-amber-100"
-                        : "border-zinc-800 bg-zinc-950/40 text-zinc-400"
-                  }`}
-                >
-                  <div className="font-medium">
-                    Slot {i + 1}/{plan.postsPerDay}
-                  </div>
-                  <div className="text-xs opacity-90">
-                    {formatSlotDateTime(slotAt, plan.timezone)}
-                  </div>
-                  <div className="mt-1 text-xs">
-                    {isFilled ? "Generated" : isDue ? "Due — needs generation" : "Upcoming"}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      <SlotBoard
+        slots={slots.map((s) => ({
+          slotIndex: s.slotIndex,
+          scheduledForLabel: formatSlotDateTime(s.scheduledFor, plan.timezone),
+          isDue: s.isDue,
+          isFilled: s.isFilled,
+          isSkipped: s.isSkipped,
+          postId: s.postId,
+          postStatus: s.postStatus,
+          postTitle: s.postTitle,
+          platform: s.platform,
+          scoreOverall: s.scoreOverall,
+        }))}
+      />
 
       <Card>
         <CardHeader>
@@ -112,10 +71,10 @@ export default async function GeneratePage() {
           {jobs.map((job) => (
             <div
               key={job.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-sm"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5 text-sm"
             >
               <div>
-                <span className="text-zinc-200">{job.status}</span>
+                <span className="font-medium text-zinc-200">{job.status}</span>
                 <span className="text-zinc-500">
                   {" "}
                   · {job.producedCount}/{job.targetCount} posts

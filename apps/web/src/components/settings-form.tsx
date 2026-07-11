@@ -128,7 +128,11 @@ export function SettingsForm({
             />
           </div>
           <div className="sm:col-span-2">
-            <Button disabled={busy} onClick={() => patch({ settings })}>
+            <Button
+              className="w-full sm:w-auto"
+              disabled={busy}
+              onClick={() => patch({ settings })}
+            >
               Save general settings
             </Button>
           </div>
@@ -144,7 +148,7 @@ export function SettingsForm({
           {topics.map((t) => (
             <div
               key={t.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 px-3 py-2"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5"
             >
               <div>
                 <div className="text-sm text-zinc-200">{t.name}</div>

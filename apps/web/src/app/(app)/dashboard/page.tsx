@@ -5,9 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
 import { isAiConfigured } from "@/lib/ai/client";
 import { formatDistanceToNow } from "date-fns";
 import { promoteDuePosts } from "@/lib/schedule/promote-ready";
+import { ArrowRight, Clock3, FileText, Sparkles, Zap } from "lucide-react";
 
 export default async function DashboardPage() {
   const session = await requireUser();
@@ -33,79 +35,96 @@ export default async function DashboardPage() {
   ]);
 
   const stats = [
-    { label: "Total posts", value: total },
-    { label: "Needs review", value: pending },
-    { label: "Ready to post", value: ready },
-    { label: "Posted (manual)", value: posted },
+    { label: "Total posts", value: total, icon: FileText, hint: "All time" },
+    { label: "Needs review", value: pending, icon: Sparkles, hint: "Awaiting you" },
+    { label: "Ready to post", value: ready, icon: Zap, hint: "Copy & ship" },
+    { label: "Posted", value: posted, icon: Clock3, hint: "Marked manual" },
   ];
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Dashboard</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Welcome back, {session.user.name}. One fresh post per due slot — you post manually on X
-            &amp; LinkedIn.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/generate">
-            <Button>Generate due slot</Button>
-          </Link>
-          <Link href="/posts?status=ready">
-            <Button variant="secondary">Ready queue</Button>
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        kicker="Overview"
+        title={`Welcome back, ${session.user.name?.split(" ")[0] || "there"}`}
+        description="One fresh post per due slot — research first, then you approve and post manually on X & LinkedIn."
+        actions={
+          <>
+            <Link href="/generate" className="w-full sm:w-auto">
+              <Button className="w-full sm:w-auto">
+                Generate due slot
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link href="/posts?status=ready" className="w-full sm:w-auto">
+              <Button variant="secondary" className="w-full sm:w-auto">
+                Ready queue
+              </Button>
+            </Link>
+          </>
+        }
+      />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((s) => (
-          <Card key={s.label}>
-            <CardContent className="pt-5">
-              <div className="text-xs uppercase tracking-wide text-zinc-500">{s.label}</div>
-              <div className="mt-1 text-3xl font-semibold tabular-nums text-zinc-50">{s.value}</div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {stats.map((s) => {
+          const Icon = s.icon;
+          return (
+            <Card key={s.label} className="stat-card">
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-500 sm:text-[11px]">
+                    {s.label}
+                  </div>
+                  <div className="rounded-lg border border-white/8 bg-white/[0.03] p-1.5 text-teal-300/80">
+                    <Icon className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+                <div className="mt-2 font-mono text-2xl font-semibold tabular-nums tracking-tight text-zinc-50 sm:text-3xl">
+                  {s.value}
+                </div>
+                <div className="mt-1 text-[11px] text-zinc-600">{s.hint}</div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Recent posts</CardTitle>
-            <CardDescription>Latest drafts and scheduled content</CardDescription>
+            <CardDescription>Latest drafts, reviews, and ready packs</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-2.5">
             {recent.length === 0 && (
-              <p className="text-sm text-zinc-500">
-                No posts yet. Run a generation job to research trends and draft content.
-              </p>
+              <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center">
+                <p className="text-sm text-zinc-400">No posts yet.</p>
+                <p className="mt-1 text-xs text-zinc-600">
+                  Run a due-slot generation to research trends and draft content.
+                </p>
+                <Link href="/generate" className="mt-4 inline-block">
+                  <Button size="sm">Generate first slot</Button>
+                </Link>
+              </div>
             )}
             {recent.map((post) => (
-              <Link
-                key={post.id}
-                href={`/posts/${post.id}`}
-                className="flex items-start justify-between gap-3 rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-3 transition hover:border-zinc-700"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge status={post.status} />
-                    <Badge className="border-zinc-700 bg-zinc-800/50 text-zinc-300">
-                      {post.platform === "x" ? "X" : "LinkedIn"}
-                    </Badge>
-                    {post.scoreOverall != null && (
-                      <span className="text-xs text-zinc-500">score {post.scoreOverall.toFixed(1)}</span>
-                    )}
-                  </div>
-                  <p className="mt-1.5 truncate text-sm text-zinc-200">
-                    {post.title || post.hook || post.content.slice(0, 80)}
-                  </p>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {formatDistanceToNow(post.createdAt, { addSuffix: true })}
-                    {post.topic ? ` · ${post.topic.name}` : ""}
-                  </p>
+              <Link key={post.id} href={`/posts/${post.id}`} className="list-row">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge status={post.status} />
+                  <Badge className="border-sky-400/20 bg-sky-400/10 text-sky-200">LinkedIn</Badge>
+                  <Badge className="border-white/10 bg-white/[0.03] text-zinc-300">X</Badge>
+                  {post.scoreOverall != null && (
+                    <span className="font-mono text-[11px] text-zinc-500">
+                      {post.scoreOverall.toFixed(1)}
+                    </span>
+                  )}
                 </div>
+                <p className="mt-2 truncate text-sm font-medium text-zinc-100">
+                  {post.title || post.hook || post.content.slice(0, 80)}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {formatDistanceToNow(post.createdAt, { addSuffix: true })}
+                  {post.topic ? ` · ${post.topic.name}` : ""}
+                </p>
               </Link>
             ))}
           </CardContent>
@@ -115,42 +134,49 @@ export default async function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>System</CardTitle>
-              <CardDescription>Runtime configuration</CardDescription>
+              <CardDescription>Runtime health</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between">
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.05] bg-black/20 px-3 py-2.5">
                 <span className="text-zinc-500">AI provider</span>
-                <span className={isAiConfigured() ? "text-emerald-400" : "text-amber-400"}>
-                  {isAiConfigured() ? "DeepSeek ready" : "Demo mode (no key)"}
+                <span
+                  className={
+                    isAiConfigured()
+                      ? "inline-flex items-center gap-1.5 text-emerald-300"
+                      : "text-amber-300"
+                  }
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${isAiConfigured() ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" : "bg-amber-400"}`}
+                  />
+                  {isAiConfigured() ? "DeepSeek ready" : "Demo mode"}
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.05] bg-black/20 px-3 py-2.5">
                 <span className="text-zinc-500">Sources in DB</span>
-                <span className="text-zinc-200">{sourceCount}</span>
+                <span className="font-mono text-zinc-200">{sourceCount}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.05] bg-black/20 px-3 py-2.5">
                 <span className="text-zinc-500">Last job</span>
                 <span className="text-zinc-200">{lastJob?.status ?? "—"}</span>
               </div>
               {!isAiConfigured() && (
-                <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">
-                  Set <code className="text-amber-100">DEEPSEEK_API_KEY</code> in{" "}
-                  <code className="text-amber-100">apps/web/.env</code> for full LLM writing. Without it,
-                  research still runs and demo posts are drafted from real sources.
+                <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-100/90">
+                  Set <code className="text-amber-50">DEEPSEEK_API_KEY</code> for full LLM writing.
+                  Research still runs without it.
                 </p>
               )}
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
+          <Card className="overflow-hidden">
+            <div className="border-b border-white/[0.05] bg-gradient-to-br from-teal-500/[0.08] to-transparent px-5 py-4">
               <CardTitle>Daily cadence</CardTitle>
-              <CardDescription>12 posts · 6:00–21:00 · manual post</CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-zinc-400">
-              Cron generates <strong className="text-zinc-200">one post per slot</strong> as each
-              time arrives (fresh research every run). Approve, then copy + optional screenshot and
-              post yourself. Never auto-posts to X/LinkedIn.
+              <CardDescription className="mt-1">12 slots · 06:00–21:00 · Asia/Dubai</CardDescription>
+            </div>
+            <CardContent className="text-sm leading-relaxed text-zinc-400">
+              Cron generates <span className="text-zinc-200">one post per slot</span> with fresh
+              research. Approve, copy text + screenshot, post yourself — never auto-published.
             </CardContent>
           </Card>
         </div>

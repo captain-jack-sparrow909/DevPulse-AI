@@ -83,7 +83,7 @@ export function GeneratePanel({
         </CardHeader>
         <CardContent className="space-y-4">
           {slotSummary && (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-3 text-sm text-zinc-300 space-y-1">
+            <div className="space-y-1.5 rounded-xl border border-white/[0.07] bg-black/30 px-3.5 py-3.5 text-sm text-zinc-300">
               <div>
                 Timezone: <span className="text-zinc-100">{slotSummary.timezone}</span>
               </div>
@@ -166,7 +166,7 @@ export function GeneratePanel({
             earliest due empty slot.
           </div>
 
-          <Button onClick={run} disabled={loading} size="lg">
+          <Button onClick={run} disabled={loading} size="lg" className="w-full sm:w-auto">
             {loading ? "Researching + writing this slot…" : "Generate due slot now"}
           </Button>
 

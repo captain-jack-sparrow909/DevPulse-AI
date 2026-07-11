@@ -109,17 +109,24 @@ Do **not** generate all 12 posts at 06:00.
 21:00  → research again + write slot 12
 ```
 
-Cron finds the earliest **due** slot without a post for today and creates **at most one** post per user per tick.
+Cron finds the earliest **due** slot without a post for today and creates **at most one** dual-format post pack (LinkedIn + X) per user per tick. It also runs retention cleanup and keeps Supabase active.
 
 ```bash
-# every ~15 minutes
-curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/slot
+# terminal 1 — app
+cd apps/web && npm run dev
+
+# terminal 2 — always-on cron (every 15 min)
+cd apps/web && npm run cron:loop
+
+# one-shot
+cd apps/web && npm run cron:once
 ```
 
-On Vercel, [`apps/web/vercel.json`](./apps/web/vercel.json) schedules `*/15 * * * *`.  
-Locally, use system crontab or hit the endpoint manually. Set `CRON_SECRET` in production.
+Each tick: **cleanup** (posts/research &gt; 30 days, screenshots &gt; 1 day) → **promote due slots** → **generate if a slot is due**. Approving a post only flips status — the row is already in Supabase when generated.
 
-Optional UI flag **Allow early** can draft the next unfilled slot before its clock time (off by default).
+Vercel: [`apps/web/vercel.json`](./apps/web/vercel.json) schedules `*/15 * * * *`. Set `CRON_SECRET` in production.
+
+**Supabase free tier:** use `DATABASE_URL` (pooler `:6543`) + `DIRECT_URL` (direct `:5432` for `prisma db push`). Optional UI flag **Allow early** can draft the next unfilled slot before its clock time.
 
 ---
 

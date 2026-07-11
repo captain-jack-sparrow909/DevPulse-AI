@@ -9,6 +9,7 @@ import { PostActions } from "@/components/post-actions";
 import { parseJsonArray } from "@/lib/utils";
 import { format } from "date-fns";
 import { promoteDuePosts } from "@/lib/schedule/promote-ready";
+import { resolveDualContent } from "@/lib/content/platforms";
 
 export default async function PostDetailPage({
   params,
@@ -49,50 +50,58 @@ export default async function PostDetailPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/posts" className="text-xs text-zinc-500 hover:text-zinc-300">
+        <Link
+          href="/posts"
+          className="text-xs font-medium text-zinc-500 transition hover:text-teal-300"
+        >
           ← Back to posts
         </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <StatusBadge status={post.status} />
-          <Badge className="border-zinc-700 bg-zinc-800/60 text-zinc-300">
-            {post.platform === "x" ? "X / Twitter" : "LinkedIn"}
-          </Badge>
-          {post.format && (
-            <Badge className="border-zinc-700 bg-zinc-800/40 text-zinc-400">{post.format}</Badge>
-          )}
+          <Badge className="border-sky-400/25 bg-sky-400/10 text-sky-200">LinkedIn</Badge>
+          <Badge className="border-white/15 bg-white/[0.06] text-zinc-200">X thread</Badge>
+          {post.format && <Badge className="text-zinc-400">{post.format}</Badge>}
           {post.angle && (
-            <Badge className="border-violet-500/20 bg-violet-500/10 text-violet-300">
+            <Badge className="border-violet-400/20 bg-violet-400/10 text-violet-200">
               {post.angle}
             </Badge>
           )}
           {post.needsImage && (
-            <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+            <Badge className="border-teal-400/25 bg-teal-400/10 text-teal-200">
               {post.imagePath ? "Has image" : "Image intended"}
             </Badge>
           )}
         </div>
-        <h1 className="mt-3 text-2xl font-semibold text-zinc-50">
+        <h1 className="page-title mt-3 break-words">
           {post.title || "Untitled post"}
         </h1>
+        <p className="page-subtitle">
+          Same idea, two formats — long-form for LinkedIn, ≤280 chars per post for X.
+        </p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className="min-w-0 lg:col-span-2">
           <CardHeader>
-            <CardTitle>Review & prepare for manual post</CardTitle>
+            <CardTitle>LinkedIn & X copy</CardTitle>
           </CardHeader>
-          <CardContent>
-            <PostActions
-              postId={post.id}
-              status={post.status}
-              initialContent={post.content}
-              imagePath={post.imagePath}
-              platform={post.platform}
-            />
+          <CardContent className="min-w-0">
+            {(() => {
+              const dual = resolveDualContent(post);
+              return (
+                <PostActions
+                  postId={post.id}
+                  status={post.status}
+                  initialLinkedIn={dual.linkedIn}
+                  initialXThread={dual.xThread}
+                  imagePath={post.imagePath}
+                />
+              );
+            })()}
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Screenshot</CardTitle>
@@ -104,7 +113,7 @@ export default async function PostDetailPage({
                   <img
                     src={post.imagePath}
                     alt={post.imageCaption || "Source screenshot"}
-                    className="w-full rounded-lg border border-zinc-800"
+                    className="h-auto w-full max-w-full rounded-lg border border-zinc-800"
                   />
                   <p className="text-xs text-zinc-500">{post.imageCaption}</p>
                   <a

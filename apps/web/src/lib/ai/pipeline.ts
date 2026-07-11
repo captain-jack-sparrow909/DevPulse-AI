@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
-import { collectAllSources, type RawSourceItem } from "@/lib/integrations";
+import { collectAllSources, describeSourceMix, type RawSourceItem } from "@/lib/integrations";
+import { diversifySources } from "@/lib/research/ingest";
 import { DEFAULT_WRITING_STYLE } from "@/lib/constants";
 import { contentHash } from "@/lib/hash";
 import { chatCompletion, isAiConfigured } from "./client";
@@ -12,7 +13,13 @@ import {
   formatSlotDateTime,
   pickNextMissingDueSlot,
 } from "@/lib/schedule/slots";
+import { clearSlotForRegenerate, getOccupiedSlotIndexes } from "@/lib/schedule/slot-actions";
 import { capturePageScreenshot, shouldIncludeImage } from "@/lib/screenshots/capture";
+import {
+  enforceXLimit,
+  splitIntoXChunks,
+  X_CHAR_LIMIT,
+} from "@/lib/content/platforms";
 
 export interface PipelineOptions {
   userId: string;
@@ -23,6 +30,11 @@ export interface PipelineOptions {
    * (manual “prepare next slot early” — still only ONE post).
    */
   allowEarly?: boolean;
+  /**
+   * Clear any existing post for the target slot today, then generate a fresh one.
+   * Requires slotIndex (or regenerates the earliest due occupied slot when combined with logic below).
+   */
+  regenerate?: boolean;
   platforms?: Array<"x" | "linkedin">;
   onLog?: (message: string) => void;
 }
@@ -61,51 +73,47 @@ function pickAngle(index: number): string {
   return ANGLES[index % ANGLES.length];
 }
 
-function demoPostContent(
-  platform: "x" | "linkedin",
-  source: RawSourceItem,
-  angle: string,
-): { content: string; title: string; hook: string } {
+type DualDraft = {
+  title: string;
+  hook: string;
+  linkedIn: string;
+  xThread: string[];
+};
+
+function demoDualContent(source: RawSourceItem, angle: string): DualDraft {
   const hook = source.title.slice(0, 80);
-  if (platform === "x") {
-    const body = `${hook}
-
-Angle: ${angle}.
-Source: ${source.provider} — worth a look if you care about shipping real systems.
-
-${source.url}`.slice(0, 280);
-    return { content: body, title: hook, hook };
-  }
-
   const summary = source.summary?.slice(0, 400) || "Fresh signal from the engineering feed.";
-  const content = `${hook}
+  const linkedIn = `${hook}
 
 ${summary}
 
-Why it matters:
-- Ties into day-to-day engineering work (${angle})
-- Grounded in a real source, not a vibe
-- Easy to turn into a deeper write-up or thread
+Why it matters (${angle}):
+- Grounded in a real ${source.provider} source, not invented hype
+- Easy to turn into a deeper write-up or internal share
+- Worth tracking if you ship production systems
 
 Read more: ${source.url}
 
-#engineering #software`;
-  return { content, title: hook, hook };
+#engineering #software #ai`;
+
+  const xBody = `${hook}
+
+${angle} — from ${source.provider}. Worth a look if you care about shipping real systems.
+
+${source.url}`;
+  const xThread = enforceXLimit(splitIntoXChunks(xBody, X_CHAR_LIMIT));
+
+  return { title: hook, hook, linkedIn, xThread };
 }
 
-async function generateWithAi(params: {
-  platform: "x" | "linkedin";
+async function generateDualWithAi(params: {
   source: RawSourceItem;
   angle: string;
   stylePrompt: string;
   rules: string;
-}): Promise<{ content: string; title: string; hook: string }> {
-  const lengthRule =
-    params.platform === "x"
-      ? "Hard limit: 280 characters for a single tweet. If longer, write a short thread as JSON array field threadParts (2-5 tweets)."
-      : "Length: 500–1800 characters. Long-form LinkedIn style with short paragraphs.";
+}): Promise<DualDraft> {
+  const user = `Write ONE idea as two platform formats from the same source.
 
-  const user = `Platform: ${params.platform}
 Angle: ${params.angle}
 Source title: ${params.source.title}
 Source url: ${params.source.url}
@@ -114,18 +122,28 @@ Provider: ${params.source.provider}
 
 Rules:
 ${params.rules}
-${lengthRule}
 
-Return JSON:
+LinkedIn:
+- Long-form, 500–2000 characters
+- Short paragraphs, senior-engineer voice
+- Educational, no clickbait
+
+X (Twitter):
+- Array of tweets. EACH tweet must be ≤ ${X_CHAR_LIMIT} characters (hard limit).
+- If the idea needs more space, write a thread (2–8 tweets), each self-contained enough to scan.
+- Do NOT put more than ${X_CHAR_LIMIT} characters in any xThread item.
+- Include the source URL in the last tweet when possible.
+
+Return JSON only:
 {
   "title": "short internal title",
-  "hook": "first line",
-  "content": "full post text",
-  "threadParts": ["optional", "for x threads only"]
+  "hook": "first line shared vibe",
+  "linkedin": "full LinkedIn post text",
+  "xThread": ["tweet 1 ≤280 chars", "tweet 2 ≤280 chars"]
 }`;
 
   const raw = await chatCompletion({
-    system: params.stylePrompt + "\n\n" + PROMPTS.writer.system(params.stylePrompt),
+    system: params.stylePrompt + "\n\nAlways produce both LinkedIn long-form and an X thread with hard 280-char limits per tweet.",
     user,
     temperature: 0.75,
     json: true,
@@ -135,26 +153,41 @@ Return JSON:
     const parsed = JSON.parse(raw) as {
       title?: string;
       hook?: string;
+      linkedin?: string;
+      linkedIn?: string;
       content?: string;
+      xThread?: string[];
       threadParts?: string[];
     };
-    let content = parsed.content?.trim() || raw;
-    if (params.platform === "x" && parsed.threadParts?.length) {
-      content = parsed.threadParts.join("\n\n---\n\n");
-    }
-    if (params.platform === "x" && content.length > 280 && !content.includes("---")) {
-      content = content.slice(0, 277) + "…";
+    const linkedIn = (
+      parsed.linkedin ||
+      parsed.linkedIn ||
+      parsed.content ||
+      raw
+    ).trim();
+    let xThread = enforceXLimit(
+      parsed.xThread?.length
+        ? parsed.xThread.map(String)
+        : parsed.threadParts?.length
+          ? parsed.threadParts.map(String)
+          : splitIntoXChunks(linkedIn),
+    );
+    if (xThread.length === 0) {
+      xThread = splitIntoXChunks(linkedIn);
     }
     return {
-      content,
       title: parsed.title || params.source.title.slice(0, 100),
-      hook: parsed.hook || content.split("\n")[0] || "",
+      hook: parsed.hook || linkedIn.split("\n")[0] || "",
+      linkedIn,
+      xThread,
     };
   } catch {
+    const linkedIn = raw.slice(0, 2000);
     return {
-      content: raw.slice(0, params.platform === "x" ? 280 : 2000),
       title: params.source.title.slice(0, 100),
       hook: raw.split("\n")[0] || "",
+      linkedIn,
+      xThread: splitIntoXChunks(linkedIn),
     };
   }
 }
@@ -233,23 +266,6 @@ export async function ensureUserDefaults(userId: string) {
   return settings;
 }
 
-async function getFilledSlotIndexesToday(
-  userId: string,
-  timezone: string,
-  now: Date,
-): Promise<Set<number>> {
-  const { start, end } = dayBoundsUtc(now, timezone);
-  const rows = await prisma.schedule.findMany({
-    where: {
-      scheduledFor: { gte: start, lte: end },
-      post: { userId },
-      status: { not: "cancelled" },
-    },
-    select: { slotIndex: true },
-  });
-  return new Set(rows.map((r) => r.slotIndex));
-}
-
 /**
  * Generate exactly ONE post for the next due calendar slot.
  *
@@ -271,7 +287,28 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     settings.postsPerDay,
   );
 
-  const filled = await getFilledSlotIndexesToday(options.userId, settings.timezone, now);
+  // Regenerate: clear existing post for the slot, then write a new one with fresh research
+  if (options.regenerate) {
+    if (options.slotIndex === undefined) {
+      return {
+        jobId: null,
+        researchRunId: null,
+        postsCreated: 0,
+        sourcesFound: 0,
+        logs: ["regenerate requires slotIndex"],
+        skipped: true,
+        skipReason: "Pick a slot to regenerate",
+      };
+    }
+    const cleared = await clearSlotForRegenerate(options.userId, options.slotIndex);
+    log(
+      logs,
+      `Regenerate: cleared ${cleared.deleted} post(s) for slot ${options.slotIndex + 1}`,
+      options.onLog,
+    );
+  }
+
+  const filled = await getOccupiedSlotIndexes(options.userId, settings.timezone, now);
 
   let slotIndex: number;
   let scheduledFor: Date;
@@ -288,7 +325,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         skipReason: `slotIndex must be 0–${plan.slots.length - 1}`,
       };
     }
-    if (filled.has(options.slotIndex)) {
+    if (filled.has(options.slotIndex) && !options.regenerate) {
       log(logs, `Slot ${options.slotIndex + 1}/${plan.postsPerDay} already has a post today — skip`, options.onLog);
       return {
         jobId: null,
@@ -297,12 +334,13 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         sourcesFound: 0,
         logs,
         skipped: true,
-        skipReason: `Slot ${options.slotIndex + 1} already generated today`,
+        skipReason: `Slot ${options.slotIndex + 1} already generated today. Use Regenerate to replace it.`,
         slotIndex: options.slotIndex,
       };
     }
     const slotTime = plan.slots[options.slotIndex]!;
-    if (now < slotTime && !options.allowEarly) {
+    // Regenerate always allowed for existing slots; early only if allowEarly or regenerate
+    if (now < slotTime && !options.allowEarly && !options.regenerate) {
       log(
         logs,
         `Slot ${options.slotIndex + 1} is not due yet (due ${formatSlotDateTime(slotTime, plan.timezone)})`,
@@ -429,13 +467,26 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       options.onLog,
     );
     log(logs, "Manual posting mode: never auto-posting to X/LinkedIn", options.onLog);
-    log(logs, "Collecting live sources (HN, GitHub, arXiv, Reddit, optional X research)…", options.onLog);
+    log(
+      logs,
+      "Collecting sources (RSS, HN, GitHub, arXiv, HF, Reddit, Dev.to, SO, Tavily, PH, light X)…",
+      options.onLog,
+    );
 
     const rawSources = await collectAllSources();
-    log(logs, `Fetched ${rawSources.length} raw sources at this moment`, options.onLog);
+    log(
+      logs,
+      `Fetched ${rawSources.length} raw sources · ${describeSourceMix(rawSources)}`,
+      options.onLog,
+    );
+
+    // Persist a diversified feed (not only topic-matched HN/arXiv)
+    const toStore = diversifySources(rawSources, 120, 14);
+    log(logs, `Storing diversified set: ${toStore.length} · ${describeSourceMix(toStore)}`, options.onLog);
 
     const keywords = topics.flatMap((t) => t.keywords.split(",").map((k) => k.trim())).filter(Boolean);
-    const ranked = rankSources(rawSources, keywords).slice(0, 40);
+    // Rank full catalog for writing, but prefer diversity + unused
+    const ranked = rankSources(rawSources, keywords);
 
     // Prefer sources not already used in today's posts
     const { start, end } = dayBoundsUtc(now, settings.timezone);
@@ -453,53 +504,97 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       ).map((r) => r.sourceId),
     );
 
-    const savedSources: { id: string; item: RawSourceItem }[] = [];
-    for (const item of ranked) {
+    const savedByKey = new Map<string, { id: string; item: RawSourceItem }>();
+    for (const item of toStore) {
+      const externalId = item.externalId.slice(0, 190);
       const saved = await prisma.source.upsert({
         where: {
-          provider_externalId: { provider: item.provider, externalId: item.externalId },
+          provider_externalId: { provider: item.provider, externalId },
         },
         create: {
           provider: item.provider,
-          externalId: item.externalId,
-          title: item.title,
+          externalId,
+          title: item.title.slice(0, 500),
           url: item.url,
-          summary: item.summary,
+          summary: item.summary?.slice(0, 2000),
           score: item.score ?? 0,
-          rawJson: item.raw ? JSON.stringify(item.raw) : null,
+          rawJson: item.raw ? JSON.stringify(item.raw).slice(0, 50_000) : null,
           researchRunId: researchRun.id,
         },
         update: {
-          title: item.title,
+          title: item.title.slice(0, 500),
           url: item.url,
-          summary: item.summary,
+          summary: item.summary?.slice(0, 2000),
           score: item.score ?? 0,
           researchRunId: researchRun.id,
           fetchedAt: new Date(),
         },
       });
-      savedSources.push({ id: saved.id, item });
+      savedByKey.set(`${item.provider}:${externalId}`, { id: saved.id, item });
     }
 
-    // Prefer unused sources first
+    // Also ensure top ranked candidates for writing are in DB
+    for (const item of ranked.slice(0, 40)) {
+      const externalId = item.externalId.slice(0, 190);
+      const key = `${item.provider}:${externalId}`;
+      if (savedByKey.has(key)) continue;
+      const saved = await prisma.source.upsert({
+        where: { provider_externalId: { provider: item.provider, externalId } },
+        create: {
+          provider: item.provider,
+          externalId,
+          title: item.title.slice(0, 500),
+          url: item.url,
+          summary: item.summary?.slice(0, 2000),
+          score: item.score ?? 0,
+          researchRunId: researchRun.id,
+        },
+        update: {
+          title: item.title.slice(0, 500),
+          url: item.url,
+          summary: item.summary?.slice(0, 2000),
+          score: item.score ?? 0,
+          researchRunId: researchRun.id,
+          fetchedAt: new Date(),
+        },
+      });
+      savedByKey.set(key, { id: saved.id, item });
+    }
+
+    // Order writing candidates: unused + high rank, diversified
+    const rankedSaved = ranked
+      .map((item) => savedByKey.get(`${item.provider}:${item.externalId.slice(0, 190)}`))
+      .filter((x): x is { id: string; item: RawSourceItem } => Boolean(x));
+
     const ordered = [
-      ...savedSources.filter((s) => !usedSourceIds.has(s.id)),
-      ...savedSources.filter((s) => usedSourceIds.has(s.id)),
+      ...rankedSaved.filter((s) => !usedSourceIds.has(s.id)),
+      ...rankedSaved.filter((s) => usedSourceIds.has(s.id)),
+      ...[...savedByKey.values()].filter(
+        (s) => !rankedSaved.some((r) => r.id === s.id) && !usedSourceIds.has(s.id),
+      ),
     ];
 
     await prisma.researchRun.update({
       where: { id: researchRun.id },
       data: {
         status: "completed",
-        sourcesFound: savedSources.length,
+        sourcesFound: savedByKey.size,
         topicsRanked: JSON.stringify(
-          ranked.slice(0, 20).map((s) => ({ title: s.title, provider: s.provider, url: s.url })),
+          ordered.slice(0, 20).map((s) => ({
+            title: s.item.title,
+            provider: s.item.provider,
+            url: s.item.url,
+          })),
         ),
         completedAt: new Date(),
       },
     });
 
-    log(logs, `Research complete: ${savedSources.length} sources (${ordered.filter((s) => !usedSourceIds.has(s.id)).length} unused today)`, options.onLog);
+    log(
+      logs,
+      `Research complete: ${savedByKey.size} sources stored · ${ordered.filter((s) => !usedSourceIds.has(s.id)).length} unused candidates today`,
+      options.onLog,
+    );
     await prisma.generationJob.update({
       where: { id: job.id },
       data: { status: "writing", logsJson: JSON.stringify(logs) },
@@ -523,8 +618,8 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     const stylePrompt = style?.systemPrompt || DEFAULT_WRITING_STYLE.systemPrompt;
     const rules = style?.rules || DEFAULT_WRITING_STYLE.rules;
     const threshold = settings.qualityThreshold;
-    // Alternate platform by slot so the day balances X and LinkedIn
-    const platform = platforms[slotIndex % platforms.length]!;
+    // Every slot pack is dual-format: LinkedIn long-form + X thread (≤280 each)
+    void platforms; // reserved for future per-platform toggles
     const angle = pickAngle(slotIndex);
 
     let produced = 0;
@@ -534,25 +629,45 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       const picked = ordered[attempt]!;
       const source = picked.item;
 
-      log(logs, `Writing ${platform} post for slot ${slotIndex + 1}: ${source.title.slice(0, 60)}…`, options.onLog);
+      log(
+        logs,
+        `Writing dual pack (LinkedIn + X) for slot ${slotIndex + 1}: ${source.title.slice(0, 60)}…`,
+        options.onLog,
+      );
 
-      let draft = useAi
-        ? await generateWithAi({ platform, source, angle, stylePrompt, rules })
-        : demoPostContent(platform, source, angle);
+      let draft: DualDraft = useAi
+        ? await generateDualWithAi({ source, angle, stylePrompt, rules })
+        : demoDualContent(source, angle);
 
-      let scores = await scoreContent(draft.content, platform, useAi);
+      draft.xThread = enforceXLimit(draft.xThread);
+      log(
+        logs,
+        `Formats ready: LinkedIn ${draft.linkedIn.length} chars · X ${draft.xThread.length} tweet(s), max ${Math.max(0, ...draft.xThread.map((t) => t.length))}/${X_CHAR_LIMIT}`,
+        options.onLog,
+      );
+
+      // Score primarily on LinkedIn body (full idea); X is a constrained rewrite
+      let scores = await scoreContent(draft.linkedIn, "linkedin", useAi);
 
       if (scores.overall < threshold && useAi) {
-        log(logs, `Score ${scores.overall} < ${threshold} — rewriting…`, options.onLog);
+        log(logs, `Score ${scores.overall} < ${threshold} — rewriting LinkedIn body…`, options.onLog);
         try {
           const edited = await chatCompletion({
             system: PROMPTS.editor.system,
-            user: `Improve this ${platform} post. Keep facts. Score was ${scores.overall}.\n\n${draft.content}`,
+            user: `Improve this LinkedIn post. Keep facts. Score was ${scores.overall}.\n\n${draft.linkedIn}`,
             temperature: 0.5,
           });
           if (edited) {
-            draft = { ...draft, content: edited, hook: edited.split("\n")[0] || draft.hook };
-            scores = await scoreContent(draft.content, platform, useAi);
+            draft = {
+              ...draft,
+              linkedIn: edited,
+              hook: edited.split("\n")[0] || draft.hook,
+              // Rebuild X thread from improved body if original was weak
+              xThread: draft.xThread.length
+                ? enforceXLimit(draft.xThread)
+                : splitIntoXChunks(edited),
+            };
+            scores = await scoreContent(draft.linkedIn, "linkedin", useAi);
           }
         } catch {
           // keep original
@@ -565,7 +680,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         continue;
       }
 
-      const hash = contentHash(draft.content);
+      const hash = contentHash(`${draft.linkedIn}\n---\n${draft.xThread.join("\n")}`);
       if (existingHashes.has(hash)) {
         lastError = "Duplicate content";
         log(logs, "Duplicate content hash — trying next source…", options.onLog);
@@ -583,8 +698,9 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           ),
       );
 
+      // Always attempt Playwright screenshot for the chosen slot source
       const imageDecision = shouldIncludeImage({
-        platform,
+        platform: "both",
         angle,
         provider: source.provider,
         title: source.title,
@@ -597,7 +713,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       let imageSkipReason: string | null = imageDecision.reason;
 
       if (imageDecision.needsImage) {
-        log(logs, `Capturing screenshot: ${source.url.slice(0, 80)}…`, options.onLog);
+        log(logs, `Playwright screenshot for chosen source: ${source.url.slice(0, 90)}…`, options.onLog);
         const shot = await capturePageScreenshot(source.url, {
           filename: `${Date.now()}-slot${slotIndex}.png`,
         });
@@ -609,20 +725,21 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           log(logs, `Screenshot saved → ${shot.publicPath}`, options.onLog);
         } else {
           imageSkipReason = shot.error || imageDecision.reason;
-          log(logs, `Screenshot skipped: ${imageSkipReason}`, options.onLog);
+          log(logs, `Screenshot failed (post still saved): ${imageSkipReason}`, options.onLog);
         }
       } else {
-        log(logs, `No image: ${imageDecision.reason}`, options.onLog);
+        log(logs, `No screenshot: ${imageDecision.reason}`, options.onLog);
       }
 
-      // Generated at due time → ready for review; if slot already passed, still pending_review
       await prisma.post.create({
         data: {
           userId: options.userId,
-          platform,
-          format: platform === "x" ? (draft.content.includes("---") ? "thread" : "single") : "longform",
+          platform: "both",
+          format: draft.xThread.length > 1 ? "dual-thread" : "dual",
           title: draft.title,
-          content: draft.content,
+          content: draft.linkedIn,
+          contentLinkedIn: draft.linkedIn,
+          threadJson: JSON.stringify(draft.xThread),
           status: "pending_review",
           contentHash: hash,
           topicId: topicMatch?.id,
@@ -655,7 +772,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           },
           readinessJobs: {
             create: {
-              platform,
+              platform: "both",
               status: "awaiting_approval",
             },
           },
@@ -693,7 +810,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       jobId: job.id,
       researchRunId: researchRun.id,
       postsCreated: 1,
-      sourcesFound: savedSources.length,
+      sourcesFound: savedByKey.size,
       logs,
       slotIndex,
       scheduledFor: scheduledFor.toISOString(),

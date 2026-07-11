@@ -110,8 +110,8 @@ export async function capturePageScreenshot(
 }
 
 /**
- * Decide whether a post should include a screenshot to lift engagement.
- * Text-only tips/hot takes often do better without; repos, papers, demos need visuals.
+ * Slot posts: always try a Playwright screenshot of the chosen source URL.
+ * Media lifts engagement on both X and LinkedIn; capture is best-effort.
  */
 export function shouldIncludeImage(params: {
   platform: string;
@@ -120,64 +120,11 @@ export function shouldIncludeImage(params: {
   title: string;
   url: string;
 }): { needsImage: boolean; reason: string } {
-  const angle = params.angle.toLowerCase();
-  const provider = params.provider.toLowerCase();
-  const title = params.title.toLowerCase();
-
-  const textOnlyAngles = ["hot take", "quick tip", "lessons learned", "career"];
-  if (textOnlyAngles.some((a) => angle.includes(a))) {
-    // LinkedIn long-form tips can still benefit from a soft visual sometimes
-    if (params.platform === "linkedin" && (provider === "github" || provider === "arxiv")) {
-      return {
-        needsImage: true,
-        reason: "LinkedIn + visual source (repo/paper) — screenshot helps scroll-stop",
-      };
-    }
-    return {
-      needsImage: false,
-      reason: "Text-first angle; image optional and usually skipped",
-    };
+  if (!params.url || !/^https?:\/\//i.test(params.url)) {
+    return { needsImage: false, reason: "No capturable URL on source" };
   }
-
-  const visualProviders = ["github", "arxiv"];
-  if (visualProviders.includes(provider)) {
-    return {
-      needsImage: true,
-      reason: `${provider} pages are visual — screenshot increases CTR`,
-    };
-  }
-
-  const visualAngles = [
-    "repo spotlight",
-    "paper insight",
-    "architecture",
-    "tutorial",
-    "comparison",
-    "thread",
-  ];
-  if (visualAngles.some((a) => angle.includes(a))) {
-    return { needsImage: true, reason: `Angle "${params.angle}" benefits from a visual` };
-  }
-
-  if (
-    title.includes("show hn") ||
-    title.includes("launch") ||
-    title.includes("demo") ||
-    title.includes("release")
-  ) {
-    return { needsImage: true, reason: "Launch/demo content performs better with a screenshot" };
-  }
-
-  // Default: include for LinkedIn, skip for short X tips unless visual source
-  if (params.platform === "linkedin") {
-    return {
-      needsImage: true,
-      reason: "LinkedIn feed favors posts with media",
-    };
-  }
-
   return {
-    needsImage: false,
-    reason: "Short X post without strong visual source — text-only",
+    needsImage: true,
+    reason: `Playwright capture of chosen ${params.provider} source for slot post`,
   };
 }

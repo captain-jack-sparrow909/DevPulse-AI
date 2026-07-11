@@ -3,8 +3,11 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooler URL for the app (port 6543)
+  url       = env("DATABASE_URL")
+  // Direct DB URL for migrations (port 5432) — required for prisma db push on Supabase
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── Better Auth tables ───────────────────────────────────────────
@@ -166,12 +169,13 @@ model Post {
   id              String   @id @default(cuid())
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  platform        String // x | linkedin
-  format          String   @default("single") // single | thread | poll | longform | tip | comparison
+  platform        String   @default("both") // both | x | linkedin (legacy single-platform)
+  format          String   @default("dual") // dual | single | thread | longform | tip | comparison
   title           String?
-  content         String
-  threadJson      String? // JSON array of thread parts
-  status          String   @default("draft") // draft | pending_review | approved | scheduled | ready | posted_manually | rejected | failed
+  content         String // primary body (LinkedIn long-form for dual posts)
+  contentLinkedIn String? // explicit LinkedIn copy (falls back to content)
+  threadJson      String? // JSON string[] — X thread, each item ≤280 chars
+  status          String   @default("draft") // draft | pending_review | approved | scheduled | ready | posted_manually | skipped | rejected | failed
   contentHash     String
   topicId         String?
   topic           Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
@@ -226,7 +230,7 @@ model Schedule {
   post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   scheduledFor DateTime
   slotIndex   Int // 0-11 for the 12 daily slots
-  status      String   @default("pending") // pending | ready | posted_manually | cancelled | missed
+  status      String   @default("pending") // pending | ready | posted_manually | skipped | cancelled | missed
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

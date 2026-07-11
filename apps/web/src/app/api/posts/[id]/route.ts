@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { contentHash } from "@/lib/hash";
 import { assertManualOnly } from "@/lib/publish/adapters";
 import { capturePageScreenshot, shouldIncludeImage } from "@/lib/screenshots/capture";
+import { enforceXLimit, parseThreadJson } from "@/lib/content/platforms";
 
 async function getUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -56,16 +57,38 @@ export async function PATCH(
       | "recapture_image"
       | "clear_image";
     content?: string;
+    contentLinkedIn?: string;
+    threadJson?: string;
     status?: string;
     rejectionReason?: string;
   };
 
-  if (body.action === "save" && body.content !== undefined) {
+  if (body.action === "save") {
+    const linkedIn = (body.contentLinkedIn ?? body.content ?? post.content).trim();
+    let threadJson = body.threadJson ?? post.threadJson;
+    if (body.threadJson !== undefined) {
+      const parts = enforceXLimit(parseThreadJson(body.threadJson));
+      // Also accept raw JSON array string that failed parseThread if needed
+      try {
+        const raw = JSON.parse(body.threadJson) as unknown;
+        if (Array.isArray(raw)) {
+          threadJson = JSON.stringify(enforceXLimit(raw.map(String)));
+        } else {
+          threadJson = JSON.stringify(parts);
+        }
+      } catch {
+        threadJson = JSON.stringify(parts.length ? parts : enforceXLimit([linkedIn]));
+      }
+    }
     const updated = await prisma.post.update({
       where: { id },
       data: {
-        content: body.content,
-        contentHash: contentHash(body.content),
+        content: linkedIn,
+        contentLinkedIn: linkedIn,
+        threadJson,
+        contentHash: contentHash(`${linkedIn}\n---\n${threadJson || ""}`),
+        platform: "both",
+        format: (parseThreadJson(threadJson).length > 1 ? "dual-thread" : "dual") as string,
         status: body.status || post.status,
       },
     });
