@@ -4,27 +4,28 @@ import { runCronForAllUsers } from "@/lib/ai/pipeline";
 import { promoteDuePosts } from "@/lib/schedule/promote-ready";
 import { runRetentionCleanup } from "@/lib/maintenance/cleanup";
 
-/** Hobby max is 60s; Pro can raise this. Background work uses this budget. */
+/** Hobby max is 60s. Worker invocation uses this full budget for research+LLM. */
 export const maxDuration = 60;
 
 /**
  * External cron target (cron-job.org / GitHub Actions / local loop).
  *
- * Default: HTTP 202 in milliseconds + continue generation via waitUntil().
- * Required because free schedulers (cron-job.org) often cap request timeout at
- * 30s, while research+LLM regularly needs 30–60s. The client disconnect must
- * NOT cancel the work — waitUntil keeps the serverless invocation alive up to
- * maxDuration after the response is sent.
+ * Why two phases?
+ * - cron-job.org free max request timeout = 30s
+ * - research + DeepSeek often needs 30–60s
+ * - Returning 202 and running work only via waitUntil in the *same* invocation
+ *   was unreliable (empty due slots until the user hit Regenerate).
  *
- * Order (60s budget):
- * 1) generate current due slot (research + write) — highest priority
- * 2) promote due approved posts
- * 3) retention cleanup + DB keep-alive
+ * Flow:
+ * 1) Dispatcher (default): auth → kick a *detached* worker request → 202 in <1s
+ * 2) Worker (?worker=1): runs generation to completion (up to maxDuration)
  *
- * Opt into full sync (local debug only): ?wait=1 or CRON_SYNC=1
+ * Every 15 min tick retries any empty slot that is due or in its prep window
+ * (~50 min before due), so a failed run is retried automatically — no UI click.
  *
- * Auth: Authorization: Bearer <CRON_SECRET>
- *   or  ?secret=<CRON_SECRET>
+ * Debug sync: ?wait=1 or CRON_SYNC=1 (not for cron-job.org).
+ *
+ * Auth: Authorization: Bearer <CRON_SECRET>  or  ?secret=<CRON_SECRET>
  */
 function authorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET?.trim();
@@ -48,15 +49,14 @@ async function runCronWork(): Promise<{
   error?: string;
 }> {
   try {
-    // Generation first so the current wall-clock slot is filled before cleanup
-    // burns remaining serverless time.
+    // Generation first — 60s budget is tight; cleanup is secondary.
     const result = await runCronForAllUsers();
     await promoteDuePosts();
     const cleanup = await runRetentionCleanup();
     return {
       ok: true,
       message:
-        "Cron finished: current due-slot generation + promote + cleanup. Missed older slots are auto-skipped.",
+        "Cron finished: prep/retry slot generation + promote + cleanup. Empty due slots are retried every tick.",
       cleanup: {
         postsDeleted: cleanup.postsDeleted,
         sourcesDeleted: cleanup.sourcesDeleted,
@@ -75,60 +75,84 @@ async function runCronWork(): Promise<{
   }
 }
 
+function buildWorkerUrl(request: Request): string {
+  const url = new URL(request.url);
+  url.searchParams.set("worker", "1");
+  url.searchParams.delete("wait");
+  // Ensure auth still works if the outer call used ?secret=
+  const secret = process.env.CRON_SECRET?.trim();
+  if (secret && !url.searchParams.get("secret")) {
+    // Prefer header on fetch; secret query is a fallback for some hosts
+  }
+  return url.toString();
+}
+
+async function dispatchWorker(request: Request): Promise<void> {
+  const workerUrl = buildWorkerUrl(request);
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "x-devpulse-cron-worker": "1",
+  };
+  const auth = request.headers.get("authorization");
+  if (auth) headers.Authorization = auth;
+
+  const secret = process.env.CRON_SECRET?.trim();
+  const urlWithSecret = new URL(workerUrl);
+  if (secret && !urlWithSecret.searchParams.get("secret") && !auth) {
+    urlWithSecret.searchParams.set("secret", secret);
+  }
+
+  console.log("[cron/slot] dispatching detached worker…");
+  try {
+    const res = await fetch(urlWithSecret.toString(), {
+      method: "GET",
+      headers,
+      cache: "no-store",
+    });
+    const text = await res.text();
+    console.log(
+      `[cron/slot] worker finished status=${res.status} body=${text.slice(0, 600)}`,
+    );
+  } catch (err) {
+    // If self-fetch fails (rare), run work inline in this waitUntil budget
+    console.error(
+      "[cron/slot] worker fetch failed, falling back to inline run:",
+      err instanceof Error ? err.message : err,
+    );
+    const result = await runCronWork();
+    console.log(
+      `[cron/slot] inline fallback: ok=${result.ok} created=${result.created} error=${result.error ?? ""}`,
+    );
+  }
+}
+
 async function handle(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const url = new URL(request.url);
-  // Sync only for local debugging — production + cron-job.org (30s max) must use async.
+  const isWorker = url.searchParams.get("worker") === "1";
   const waitForResult =
     url.searchParams.get("wait") === "1" || process.env.CRON_SYNC === "1";
 
-  if (waitForResult) {
+  // Worker or explicit sync: run generation to completion in this invocation
+  if (isWorker || waitForResult) {
     const result = await runCronWork();
     console.log(
-      "[cron/slot] sync done: created=",
-      result.created,
-      "users=",
-      result.users,
-      "ok=",
-      result.ok,
+      `[cron/slot] ${isWorker ? "worker" : "sync"} done: created=${result.created} users=${result.users} ok=${result.ok}`,
     );
     return NextResponse.json(result, { status: result.ok ? 200 : 500 });
   }
 
-  // Start work immediately, register with waitUntil, then return 202.
-  // cron-job.org's 30s timeout only applies to waiting for the HTTP response;
-  // once we respond, Vercel keeps this invocation for up to maxDuration.
-  const work = runCronWork()
-    .then((result) => {
-      if (!result.ok) {
-        console.error("[cron/slot] background failed:", result.error);
-      } else {
-        console.log(
-          "[cron/slot] background ok: created=",
-          result.created,
-          "users=",
-          result.users,
-          "results=",
-          JSON.stringify(result.results ?? []),
-        );
-      }
-      return result;
-    })
-    .catch((err) => {
-      console.error(
-        "[cron/slot] background threw:",
-        err instanceof Error ? err.message : err,
-      );
-    });
-
+  // Dispatcher: return 202 immediately (safe for 30s scheduler caps),
+  // then start a detached worker with its own maxDuration budget.
+  const dispatch = dispatchWorker(request);
   try {
-    waitUntil(work);
+    waitUntil(dispatch);
   } catch {
-    // Local Next.js / non-Vercel: fire-and-forget so the response still returns fast
-    void work;
+    // Local Next.js may not support waitUntil
+    void dispatch;
   }
 
   return NextResponse.json(
@@ -136,7 +160,7 @@ async function handle(request: Request) {
       ok: true,
       accepted: true,
       message:
-        "Cron accepted in <1s (safe for 30s scheduler timeouts). Slot generation continues on Vercel up to ~60s. Check Vercel logs for `background ok` and /posts for new packs.",
+        "Cron accepted. Detached worker will prep/retry the next slot (research + write). Empty due slots retry every 15 min until filled — no Regenerate click required.",
     },
     { status: 202 },
   );

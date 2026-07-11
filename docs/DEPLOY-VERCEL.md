@@ -90,14 +90,14 @@ GET https://YOUR-APP.vercel.app/api/cron/slot
 Authorization: Bearer YOUR_CRON_SECRET
 ```
 
-Each call (order matters for the 60s budget):
-1. Generates **at most one** dual pack for the **latest** due empty slot (current wall-clock window)
-2. Auto-skips older empty due slots so work never backfills into a later slot
-3. Promotes due approved posts → `ready`
-4. Deletes posts/research older than **30 days** + screenshot cleanup
-5. Touches Supabase so free DB stays active
+Each call:
+1. Dispatcher returns **202 in under 1s** (safe for cron-job.org’s **30s** max timeout)
+2. A **detached worker** (`?worker=1`) runs research + write with a full ~60s budget
+3. Preps the next unfilled slot ~**50 min before** due (so the 6:00 post is ready *by* 6:00)
+4. **Retries** any empty due slot every tick until filled — no Regenerate click required
+5. Promotes approved posts → `ready`, then retention cleanup
 
-**Default is async (HTTP 202 in under 1s)** so free schedulers with a **30s request timeout** (e.g. cron-job.org) succeed. Generation continues on Vercel via `waitUntil` for up to ~60s after the response. Do **not** set `CRON_SYNC=1` in production with a 30s client timeout — the HTTP kill can cut off a sync run.
+**Do not** set `CRON_SYNC=1` with a 30s client timeout.
 
 ### Option A — cron-job.org (free, recommended)
 
@@ -119,8 +119,8 @@ cron-job.org free plan max request timeout is **30 seconds**. That is fine: our 
 
 4. Save → **Run now** once to test  
 5. Expect HTTP **202** with `{ "ok": true, "accepted": true, ... }` in well under 30s  
-6. Confirm in **Vercel → Logs** a later line: `[cron/slot] background ok: created=…`  
-7. Check **Posts** a minute later for a new pack when a slot is due — no Generate click needed  
+6. Confirm in **Vercel → Logs**: `dispatching detached worker…` then `worker finished status=200` / `created=1`  
+7. Check **Posts** within ~1–2 minutes of a prep/due window — empty due slots retry every 15 min automatically  
 
 Optional query fallback if custom headers are awkward:  
 `https://YOUR-APP.vercel.app/api/cron/slot?secret=YOUR_CRON_SECRET`

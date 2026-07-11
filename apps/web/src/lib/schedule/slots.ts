@@ -113,14 +113,81 @@ export function buildSlotPlan(
 }
 
 /**
+ * Start preparing a slot this many ms before its wall-clock time so the draft
+ * is ready *by* the slot (e.g. 6:00 post prepared from ~5:10).
+ * ~50 min is less than the ~82 min gap between 12 slots (06:00–21:00).
+ */
+export const SLOT_PREP_LEAD_MS = 50 * 60 * 1000;
+
+/**
+ * How many slots behind "current due" we still retry before auto-skipping.
+ * 1 = catch up one lagging slot; older empty dues are abandoned.
+ */
+export const SLOT_RETRY_LAG = 1;
+
+export type SlotPickMode = "prep_early" | "due_or_retry";
+
+export interface SlotPick {
+  slotIndex: number;
+  scheduledFor: Date;
+  mode: SlotPickMode;
+}
+
+/**
+ * Choose the next slot the cron should fill automatically.
+ *
+ * Policy (ready-by + retry, no multi-hour backlog dump):
+ * 1. Walk slots in order (0 → 11). First unfilled slot whose prep window has
+ *    opened (`dueTime - SLOT_PREP_LEAD`) is the candidate.
+ * 2. If that slot is still empty after due time, every cron tick retries it
+ *    until it succeeds — no user click required.
+ * 3. If several dues are empty and the clock has moved on, only retry within
+ *    SLOT_RETRY_LAG of the latest due index; older ones are stale (auto-skip).
+ */
+export function pickSlotForGeneration(
+  plan: SlotPlan,
+  filledSlotIndexes: Set<number>,
+  now: Date = new Date(),
+  prepLeadMs: number = SLOT_PREP_LEAD_MS,
+): SlotPick | null {
+  const currentDueIdx =
+    plan.dueSlotIndexes.length > 0
+      ? plan.dueSlotIndexes[plan.dueSlotIndexes.length - 1]!
+      : -1;
+  const nowMs = now.getTime();
+
+  for (let i = 0; i < plan.slots.length; i++) {
+    if (filledSlotIndexes.has(i)) continue;
+
+    const scheduledFor = plan.slots[i]!;
+    const dueMs = scheduledFor.getTime();
+    const prepOpensMs = dueMs - prepLeadMs;
+    const isDue = nowMs >= dueMs;
+    const inPrep = !isDue && nowMs >= prepOpensMs;
+
+    if (!isDue && !inPrep) {
+      // Next unfilled slot is still too early — wait for its prep window
+      return null;
+    }
+
+    // Too far behind the live wall-clock due slot → leave for auto-skip
+    if (isDue && currentDueIdx >= 0 && i < currentDueIdx - SLOT_RETRY_LAG) {
+      continue;
+    }
+
+    return {
+      slotIndex: i,
+      scheduledFor,
+      mode: isDue ? "due_or_retry" : "prep_early",
+    };
+  }
+
+  return null;
+}
+
+/**
  * The current wall-clock due slot only (most recent slot whose time has arrived).
- *
- * If cron missed 08:00 and it's now 11:00, we generate the *11:00* window —
- * never backfill 08:00 into the 11:00 clock. Older empty due slots are
- * "missed windows" and should be auto-skipped (see listMissedDueSlotsBefore).
- *
- * Returns null if nothing is due yet, or the current due slot already has a post
- * (even if earlier due slots are still empty — those are abandoned, not filled late).
+ * Kept for UI labels / summary.
  */
 export function pickLatestMissingDueSlot(
   plan: SlotPlan,
@@ -134,7 +201,6 @@ export function pickLatestMissingDueSlot(
 
 /**
  * Due slots earlier than `beforeSlotIndex` that were never filled.
- * These missed their window and must not spill into later slot times.
  */
 export function listMissedDueSlotsBefore(
   plan: SlotPlan,
@@ -147,27 +213,31 @@ export function listMissedDueSlotsBefore(
 }
 
 /**
- * When the current due slot is already filled, still return earlier empty due
- * indexes so cron can mark them skipped (housekeeping without generating).
+ * Empty due slots that are too old to retry (behind live due by more than lag).
  */
-export function listAllMissedDueSlots(
+export function listStaleMissedDueSlots(
   plan: SlotPlan,
   filledSlotIndexes: Set<number>,
 ): number[] {
   if (plan.dueSlotIndexes.length === 0) return [];
   const currentIdx = plan.dueSlotIndexes[plan.dueSlotIndexes.length - 1]!;
-  // Everything due that is empty, except we still want to clear backlog even
-  // when current is filled — all empty due slots earlier than / not current are misses.
-  // If current is empty, "missed" = due before current. If current is filled, all empty due are misses.
   return plan.dueSlotIndexes.filter((idx) => {
     if (filledSlotIndexes.has(idx)) return false;
-    // Never treat the open current window as a "miss" — that's what we generate
-    if (idx === currentIdx && !filledSlotIndexes.has(currentIdx)) return false;
-    return true;
+    return idx < currentIdx - SLOT_RETRY_LAG;
   });
 }
 
-/** @deprecated Prefer pickLatestMissingDueSlot — kept as alias for call sites. */
+/**
+ * When the current due slot is already filled, older empty dues to mark skipped.
+ */
+export function listAllMissedDueSlots(
+  plan: SlotPlan,
+  filledSlotIndexes: Set<number>,
+): number[] {
+  return listStaleMissedDueSlots(plan, filledSlotIndexes);
+}
+
+/** @deprecated Prefer pickSlotForGeneration / pickLatestMissingDueSlot */
 export function pickNextMissingDueSlot(
   plan: SlotPlan,
   filledSlotIndexes: Set<number>,

@@ -105,9 +105,11 @@ export function SlotBoard({ slots }: { slots: SlotBoardItem[] }) {
         <CardHeader>
           <CardTitle>Today&apos;s slot board</CardTitle>
           <CardDescription>
-            <strong className="text-zinc-300">Skip</strong> if you don&apos;t want a post for that
-            window. <strong className="text-zinc-300">Regenerate</strong> if you dislike the draft —
-            it deletes the current one and runs fresh research for the same slot.
+            Cron auto-preps each slot ~50 min before its time and{" "}
+            <strong className="text-zinc-300">retries empty due slots every 15 min</strong> — you
+            should not need Regenerate for a missing post. Use{" "}
+            <strong className="text-zinc-300">Skip</strong> to leave a window empty, or{" "}
+            <strong className="text-zinc-300">Regenerate</strong> only if you dislike a draft.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -143,8 +145,8 @@ export function SlotBoard({ slots }: { slots: SlotBoardItem[] }) {
                             ? "Review"
                             : slot.postStatus || "Filled"
                           : slot.isDue
-                            ? "Due"
-                            : "Later"}
+                            ? "Due · auto-retry"
+                            : "Later · auto-prep"}
                     </span>
                   </div>
 

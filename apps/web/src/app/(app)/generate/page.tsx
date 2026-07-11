@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { formatDistanceToNow } from "date-fns";
 import { getTodaySlotRows } from "@/lib/schedule/slot-actions";
-import { formatSlotDateTime, pickLatestMissingDueSlot } from "@/lib/schedule/slots";
+import { formatSlotDateTime, pickSlotForGeneration } from "@/lib/schedule/slots";
 
 export default async function GeneratePage() {
   const session = await requireUser();
@@ -15,7 +15,7 @@ export default async function GeneratePage() {
   const { plan, slots } = await getTodaySlotRows(userId);
 
   const filled = new Set(slots.filter((s) => s.isFilled).map((s) => s.slotIndex));
-  const nextMissing = pickLatestMissingDueSlot(plan, filled);
+  const nextMissing = pickSlotForGeneration(plan, filled);
 
   const jobs = await prisma.generationJob.findMany({
     where: { userId },
@@ -38,7 +38,7 @@ export default async function GeneratePage() {
           filledToday: filled.size,
           postsPerDay: plan.postsPerDay,
           nextDueLabel: nextMissing
-            ? `Slot ${nextMissing.slotIndex + 1} · ${formatSlotDateTime(nextMissing.scheduledFor, plan.timezone)}`
+            ? `Slot ${nextMissing.slotIndex + 1} · ${formatSlotDateTime(nextMissing.scheduledFor, plan.timezone)} · ${nextMissing.mode === "prep_early" ? "prepping" : "due/retry"}`
             : null,
           nextUpcomingLabel:
             plan.nextUpcomingIndex != null && plan.nextUpcomingAt

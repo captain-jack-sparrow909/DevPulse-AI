@@ -161,10 +161,10 @@ export function GeneratePanel({
 
           <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2 text-xs text-violet-100/90">
             <strong className="text-violet-200">Automatic:</strong> external cron hits{" "}
-            <code className="text-violet-100">GET /api/cron/slot</code> every ~15 minutes. The
-            endpoint returns <strong className="text-violet-100">202 in under a second</strong>{" "}
-            (works with cron-job.org’s 30s max timeout); generation continues on Vercel for up to
-            ~60s. Each tick fills the <em>current</em> due slot only and auto-skips older misses.
+            <code className="text-violet-100">GET /api/cron/slot</code> every ~15 minutes (202 in
+            under 1s for cron-job.org’s 30s cap). A detached worker preps each post ~50 min before
+            its slot and <strong className="text-violet-100">retries empty due slots</strong> until
+            filled — no Regenerate click for gaps.
           </div>
 
           <Button onClick={run} disabled={loading} size="lg" className="w-full sm:w-auto" variant="secondary">

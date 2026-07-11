@@ -18,9 +18,8 @@ import {
   buildSlotPlan,
   dayBoundsUtc,
   formatSlotDateTime,
-  listAllMissedDueSlots,
-  listMissedDueSlotsBefore,
-  pickLatestMissingDueSlot,
+  listStaleMissedDueSlots,
+  pickSlotForGeneration,
 } from "@/lib/schedule/slots";
 import {
   clearSlotForRegenerate,
@@ -290,13 +289,13 @@ export async function ensureUserDefaults(userId: string) {
 }
 
 /**
- * Generate exactly ONE post for the latest due calendar slot.
+ * Generate exactly ONE post for the next slot that should be ready.
  *
- * Why not 12 at once? Later slots re-run research so midday trends appear
- * the same day instead of waiting until tomorrow.
+ * - Preps ~50 min before due so the draft is ready *by* slot time (6:00, 7:22, …)
+ * - Retries empty due slots on every cron tick until success (no user click)
+ * - Only auto-skips slots that are more than one lag behind the live due index
  *
- * Missed older due slots are auto-skipped so work never spills into the next
- * wall-clock window (approve/post is manual; generation is automatic via cron).
+ * Approve/post stays manual. Cron drives generation.
  */
 export async function runDueSlotGeneration(options: PipelineOptions): Promise<PipelineResult> {
   const logs: string[] = [];
@@ -312,6 +311,48 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     settings.lastPostHour,
     settings.postsPerDay,
   );
+
+  // Clear stuck jobs left when a serverless invocation was killed mid-run
+  await prisma.generationJob.updateMany({
+    where: {
+      userId: options.userId,
+      status: { in: ["researching", "writing", "planning", "scoring"] },
+      createdAt: { lt: new Date(Date.now() - 8 * 60 * 1000) },
+    },
+    data: {
+      status: "failed",
+      error: "Interrupted or timed out — cron will retry this slot",
+      completedAt: new Date(),
+    },
+  });
+
+  // Avoid overlapping cron workers for the same user (double posts / pool thrash)
+  if (!options.regenerate && options.slotIndex === undefined) {
+    const inflight = await prisma.generationJob.findFirst({
+      where: {
+        userId: options.userId,
+        status: { in: ["researching", "writing", "planning", "scoring"] },
+        createdAt: { gte: new Date(Date.now() - 8 * 60 * 1000) },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (inflight) {
+      log(
+        logs,
+        `Generation already in progress (job ${inflight.id.slice(0, 8)}…, status=${inflight.status}) — skip this tick`,
+        options.onLog,
+      );
+      return {
+        jobId: inflight.id,
+        researchRunId: inflight.researchRunId,
+        postsCreated: 0,
+        sourcesFound: 0,
+        logs,
+        skipped: true,
+        skipReason: "Generation already in progress — next cron tick will continue if needed",
+      };
+    }
+  }
 
   // Regenerate: clear existing post for the slot, then write a new one with fresh research
   if (options.regenerate) {
@@ -387,10 +428,46 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     slotIndex = options.slotIndex;
     scheduledFor = slotTime;
   } else {
-    // Current wall-clock window only — never backfill an older empty slot into "now"
-    const missing = pickLatestMissingDueSlot(plan, filled);
-    if (!missing) {
-      // Optional: draft the next upcoming unfilled slot before its due time
+    // Cron default: prep early + retry due empties until success
+    const pick = pickSlotForGeneration(plan, filled, now);
+    if (!pick) {
+      // Housekeeping: abandon only slots that are too far behind the live clock
+      const stale = listStaleMissedDueSlots(plan, filled);
+      for (const missedIdx of stale) {
+        try {
+          await skipSlot(
+            options.userId,
+            missedIdx,
+            "Missed window — auto-skipped (too far behind live schedule; will not block later slots)",
+          );
+          filled.add(missedIdx);
+          log(logs, `Auto-skipped stale missed slot ${missedIdx + 1}`, options.onLog);
+        } catch (err) {
+          log(
+            logs,
+            `Could not auto-skip slot ${missedIdx + 1}: ${err instanceof Error ? err.message : "error"}`,
+            options.onLog,
+          );
+        }
+      }
+
+      if (filled.size >= plan.postsPerDay) {
+        log(logs, `All ${plan.postsPerDay} slots already filled for today`, options.onLog);
+        return {
+          jobId: null,
+          researchRunId: null,
+          postsCreated: 0,
+          sourcesFound: 0,
+          logs,
+          skipped: true,
+          skipReason: "All slots already have posts for today",
+        };
+      }
+
+      const nextLabel = plan.nextUpcomingAt
+        ? formatSlotDateTime(plan.nextUpcomingAt, plan.timezone)
+        : "tomorrow";
+      // Manual allowEarly: draft the next chronological unfilled slot immediately
       if (options.allowEarly) {
         let earlyIndex: number | null = null;
         for (let i = 0; i < plan.slots.length; i++) {
@@ -404,11 +481,10 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           scheduledFor = plan.slots[earlyIndex]!;
           log(
             logs,
-            `Early mode: preparing slot ${slotIndex + 1} before due (${formatSlotDateTime(scheduledFor, plan.timezone)})`,
+            `Manual early mode: preparing slot ${slotIndex + 1} (${formatSlotDateTime(scheduledFor, plan.timezone)})`,
             options.onLog,
           );
         } else {
-          log(logs, `All ${plan.postsPerDay} slots already filled for today`, options.onLog);
           return {
             jobId: null,
             researchRunId: null,
@@ -419,45 +495,10 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
             skipReason: "All slots already have posts for today",
           };
         }
-      } else if (plan.dueSlotIndexes.length === 0) {
-        const nextLabel = plan.nextUpcomingAt
-          ? formatSlotDateTime(plan.nextUpcomingAt, plan.timezone)
-          : "tomorrow";
-        log(logs, `No slot due yet. Next slot: ${nextLabel}`, options.onLog);
-        return {
-          jobId: null,
-          researchRunId: null,
-          postsCreated: 0,
-          sourcesFound: 0,
-          logs,
-          skipped: true,
-          skipReason: `No slot due yet. Next: ${nextLabel}`,
-          slotIndex: plan.nextUpcomingIndex ?? undefined,
-          scheduledFor: plan.nextUpcomingAt?.toISOString(),
-        };
       } else {
-        // Current window already has a post — still mark older empty due slots as missed
-        const backlog = listAllMissedDueSlots(plan, filled);
-        for (const missedIdx of backlog) {
-          try {
-            await skipSlot(
-              options.userId,
-              missedIdx,
-              "Missed window — auto-skipped (current due slot already filled)",
-            );
-            filled.add(missedIdx);
-            log(logs, `Auto-skipped missed slot ${missedIdx + 1}`, options.onLog);
-          } catch (err) {
-            log(
-              logs,
-              `Could not auto-skip slot ${missedIdx + 1}: ${err instanceof Error ? err.message : "error"}`,
-              options.onLog,
-            );
-          }
-        }
         log(
           logs,
-          `Current due slot already filled (${filled.size}/${plan.postsPerDay} occupied today)`,
+          `Nothing to generate yet. Next prep window opens before: ${nextLabel}`,
           options.onLog,
         );
         return {
@@ -467,28 +508,33 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           sourcesFound: 0,
           logs,
           skipped: true,
-          skipReason: "Current due slot already has a post — waiting for the next slot",
+          skipReason: `Nothing to generate yet. Next slot: ${nextLabel} (auto-preps ~50 min before)`,
+          slotIndex: plan.nextUpcomingIndex ?? undefined,
+          scheduledFor: plan.nextUpcomingAt?.toISOString(),
         };
       }
     } else {
-      slotIndex = missing.slotIndex;
-      scheduledFor = missing.scheduledFor;
+      slotIndex = pick.slotIndex;
+      scheduledFor = pick.scheduledFor;
+      log(
+        logs,
+        pick.mode === "prep_early"
+          ? `Prep-early: generating slot ${slotIndex + 1} so it is ready by ${formatSlotDateTime(scheduledFor, plan.timezone)}`
+          : `Due/retry: slot ${slotIndex + 1} still empty after ${formatSlotDateTime(scheduledFor, plan.timezone)} — generating now (auto, no user click)`,
+        options.onLog,
+      );
 
-      // Auto-skip older empty due slots so creation never spills into a later window
-      const missed = listMissedDueSlotsBefore(plan, filled, slotIndex);
-      for (const missedIdx of missed) {
+      // Auto-skip only stale empties (too far behind live clock), not the slot we fill
+      const staleBefore = listStaleMissedDueSlots(plan, filled).filter((idx) => idx < slotIndex);
+      for (const missedIdx of staleBefore) {
         try {
           await skipSlot(
             options.userId,
             missedIdx,
-            `Missed window — auto-skipped so slot ${slotIndex + 1} stays on schedule`,
+            `Missed window — auto-skipped while generating slot ${slotIndex + 1}`,
           );
           filled.add(missedIdx);
-          log(
-            logs,
-            `Auto-skipped missed slot ${missedIdx + 1} (window closed; generating current slot ${slotIndex + 1} only)`,
-            options.onLog,
-          );
+          log(logs, `Auto-skipped stale slot ${missedIdx + 1}`, options.onLog);
         } catch (err) {
           log(
             logs,
@@ -957,7 +1003,8 @@ export async function runGenerationPipeline(options: PipelineOptions): Promise<P
 }
 
 /**
- * Cron entry: for each user (or one user), generate at most one due-slot post.
+ * Cron entry: for each user, prep or retry at most one slot post.
+ * Failures are not fatal — the next 15‑min tick retries the same empty slot.
  */
 export async function runCronForAllUsers(): Promise<{
   users: number;
@@ -970,6 +1017,7 @@ export async function runCronForAllUsers(): Promise<{
 
   for (const user of users) {
     try {
+      // allowEarly is handled inside via prep window; no need to force all slots early
       const r = await runDueSlotGeneration({ userId: user.id });
       created += r.postsCreated;
       results.push({
@@ -977,12 +1025,22 @@ export async function runCronForAllUsers(): Promise<{
         postsCreated: r.postsCreated,
         skipReason: r.skipReason,
       });
+      if (r.postsCreated === 0 && r.skipReason) {
+        console.log(`[cron] user=${user.id.slice(0, 8)}… skip: ${r.skipReason}`);
+      } else if (r.postsCreated > 0) {
+        console.log(
+          `[cron] user=${user.id.slice(0, 8)}… created slot ${(r.slotIndex ?? 0) + 1}`,
+        );
+      }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "error";
+      console.error(`[cron] user=${user.id.slice(0, 8)}… failed: ${msg}`);
       results.push({
         userId: user.id,
         postsCreated: 0,
-        skipReason: err instanceof Error ? err.message : "error",
+        skipReason: msg,
       });
+      // Leave slot empty — next tick retries automatically
     }
   }
 

@@ -49,7 +49,7 @@ export default async function DashboardPage() {
       <PageHeader
         kicker="Overview"
         title={`Welcome back, ${session.user.name?.split(" ")[0] || "there"}`}
-        description="Cron auto-generates one post per due slot. You only approve and post manually on X & LinkedIn — generation does not wait for you."
+        description="Each slot is auto-prepped before its time and retried every 15 min if empty. You only approve and post manually — never click Generate for a due gap."
         actions={
           <>
             <Link href="/posts?status=pending_review" className="w-full sm:w-auto">
