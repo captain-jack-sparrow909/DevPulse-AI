@@ -160,11 +160,11 @@ export function GeneratePanel({
           </div>
 
           <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2 text-xs text-violet-100/90">
-            <strong className="text-violet-200">Automatic (chunked):</strong> cron runs{" "}
-            <strong className="text-violet-100">one research chunk per worker</strong> (HN/Reddit →
-            GitHub/arXiv/HF → RSS/Dev.to → SO/PH/Tavily), saves sources, then a final write phase.
-            Workers self-chain so a slot finishes in ~1–2 minutes without blowing Vercel’s 60s
-            limit. Screenshots: use Recapture on the post.
+            <strong className="text-violet-200">Automatic (chunked):</strong> each cron packs as many
+            steps as fit in ~52s (HN/Reddit → GitHub/arXiv/HF → RSS/Dev.to → SO/PH/Tavily → write).
+            Sources save between chunks. If time runs out, the{" "}
+            <strong className="text-violet-100">next 15‑min cron continues</strong> (including write).
+            No self-HTTP chain (Vercel blocks that with 508). Screenshots: Recapture on the post.
           </div>
 
           <Button onClick={run} disabled={loading} size="lg" className="w-full sm:w-auto" variant="secondary">

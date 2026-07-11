@@ -91,16 +91,15 @@ Authorization: Bearer YOUR_CRON_SECRET
 ```
 
 Each call:
-1. Dispatcher returns **202 in under 1s** (safe for cron-job.org’s **30s** max timeout)
-2. Workers run **one phase each** (fits Hobby **60s**):
-   - Research chunk 1: HN + Reddit  
+1. Returns **202 in under 1s** (cron-job.org 30s cap) then runs work via `waitUntil` **in the same invocation** (no self-HTTP — Vercel returns **508 Infinite loop** if the route fetches itself).
+2. Inside ~**52s**, runs as many phases as fit:
+   - Chunk 1: HN + Reddit  
    - Chunk 2: GitHub + arXiv + Hugging Face  
    - Chunk 3: RSS + Dev.to  
-   - Chunk 4: Stack Overflow + Product Hunt + Tavily (+ light X)  
-   - **Write** dual LinkedIn + X post from all stored sources  
-3. Workers **self-chain** until the post is written (~1–2 min wall time)
-4. Preps ~**50 min before** due; empty dues retry on the next external tick
-5. Screenshots are skipped on cron — use **Recapture** in the UI
+   - Chunk 4: SO + Product Hunt + Tavily (+ light X)  
+   - **Write** dual post from stored sources  
+3. If the budget ends mid-job, status stays `research`/`write` and the **next 15‑min cron resumes** (often finishes write alone).
+4. Preps ~**50 min before** due. Screenshots: use **Recapture** in the UI.
 
 **Do not** set `CRON_SYNC=1` with a 30s client timeout.
 

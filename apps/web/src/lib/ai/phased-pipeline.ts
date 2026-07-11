@@ -152,16 +152,17 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
   );
   const { start, end } = dayBoundsUtc(now, settings.timezone);
 
-  // Mark stuck jobs failed (killed mid-phase)
+  // Mark stuck jobs failed only after >2 external cron intervals (so a write
+  // waiting for the next 15‑min tick is not killed as "stuck").
   await prisma.generationJob.updateMany({
     where: {
       userId,
       status: { in: ["research", "researching", "write", "writing"] },
-      updatedAt: { lt: new Date(Date.now() - 12 * 60 * 1000) },
+      updatedAt: { lt: new Date(Date.now() - 35 * 60 * 1000) },
     },
     data: {
       status: "failed",
-      error: "Phase timed out / interrupted — will start fresh on next due slot tick",
+      error: "Phase stalled >35 min — starting fresh on next due tick",
       completedAt: new Date(),
     },
   });
@@ -751,8 +752,89 @@ Return JSON only:
   }
 }
 
+/** Minimum ms we must have left before starting the next phase. */
+async function minMsForNextPhase(userId: string): Promise<number> {
+  const settings = await ensureUserDefaults(userId);
+  const { start, end } = dayBoundsUtc(new Date(), settings.timezone);
+  const open = await prisma.generationJob.findFirst({
+    where: {
+      userId,
+      status: { in: ["research", "researching", "write", "writing"] },
+      createdAt: { gte: start, lte: end },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!open) return 14_000; // start job + first research chunk
+  if (open.status === "write" || open.status === "writing") return 22_000; // LLM write
+  return 12_000; // one research chunk
+}
+
 /**
- * Cron entry: one phase per user. Caller should self-chain when continueChain.
+ * Run as many phases as fit in `budgetMs` for one user (no HTTP self-calls).
+ * Vercel blocks same-URL worker chains with 508 Infinite loop — so we pack
+ * chunks into one invocation and let the *next external cron* continue if needed.
+ */
+export async function runPhasesWithBudget(
+  userId: string,
+  budgetMs = 52_000,
+): Promise<PhaseResult> {
+  const t0 = Date.now();
+  const allLogs: string[] = [];
+  let last: PhaseResult = {
+    jobId: null,
+    researchRunId: null,
+    postsCreated: 0,
+    sourcesFound: 0,
+    logs: [],
+    continueChain: false,
+  };
+  let postsCreated = 0;
+  let phasesRun = 0;
+
+  while (Date.now() - t0 < budgetMs) {
+    const remaining = budgetMs - (Date.now() - t0);
+    const need = await minMsForNextPhase(userId);
+    if (remaining < need) {
+      log(
+        allLogs,
+        `Budget pause: ${Math.round(remaining / 1000)}s left, need ~${Math.round(need / 1000)}s for next phase — next external cron will continue`,
+      );
+      last = {
+        ...last,
+        continueChain: true,
+        skipReason: `Paused for next cron tick (${phasesRun} phase(s) this run)`,
+        logs: allLogs,
+      };
+      break;
+    }
+
+    const r = await runOneGenerationPhase(userId);
+    phasesRun += 1;
+    allLogs.push(...r.logs);
+    postsCreated += r.postsCreated;
+    last = { ...r, logs: allLogs, postsCreated };
+
+    if (r.postsCreated > 0) {
+      log(allLogs, `Done after ${phasesRun} phase(s) in ${Date.now() - t0}ms`);
+      return { ...last, postsCreated, logs: allLogs, continueChain: false };
+    }
+    if (!r.continueChain) {
+      return { ...last, postsCreated, logs: allLogs, continueChain: false };
+    }
+  }
+
+  return {
+    ...last,
+    postsCreated,
+    logs: allLogs,
+    continueChain: last.continueChain && postsCreated === 0,
+    phase: last.phase ?? `budget:${phasesRun}`,
+  };
+}
+
+/**
+ * Cron entry: pack multiple research/write phases into one 60s invocation.
+ * Incomplete jobs resume on the next external cron tick (no self-fetch chain).
  */
 export async function runCronPhaseForAllUsers(): Promise<{
   users: number;
@@ -779,7 +861,7 @@ export async function runCronPhaseForAllUsers(): Promise<{
 
   for (const user of users) {
     try {
-      const r = await runOneGenerationPhase(user.id);
+      const r = await runPhasesWithBudget(user.id, 52_000);
       created += r.postsCreated;
       if (r.continueChain) continueChain = true;
       results.push({
@@ -790,7 +872,7 @@ export async function runCronPhaseForAllUsers(): Promise<{
         continueChain: r.continueChain,
       });
       console.log(
-        `[cron-phase] user=${user.id.slice(0, 8)}… phase=${r.phase ?? "—"} created=${r.postsCreated} chain=${r.continueChain}`,
+        `[cron-phase] user=${user.id.slice(0, 8)}… phase=${r.phase ?? "—"} created=${r.postsCreated} more=${r.continueChain}`,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : "error";
