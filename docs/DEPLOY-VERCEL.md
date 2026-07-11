@@ -35,8 +35,9 @@ In **Project → Settings → Environment Variables**, add for **Production**:
 
 | Name | Notes |
 |------|--------|
-| `DATABASE_URL` | Supabase **pooler** `:6543` with `?pgbouncer=true&connection_limit=5&sslmode=require` |
-| `DIRECT_URL` | Supabase **direct** `:5432` with `?sslmode=require` |
+| `DATABASE_URL` | Prefer Supabase **pooler** `:6543` (`…pooler.supabase.com:6543/…?pgbouncer=true&connection_limit=5&sslmode=require`). **Do not** use only `db.…supabase.co:5432` on Vercel — cron will fail with “Can't reach database server”. |
+| `DATABASE_URL_POOLED` | Optional backup of the pooler URL. On Vercel the app prefers this if set. |
+| `DIRECT_URL` | Direct `:5432` for local `prisma db push` only (optional on Vercel runtime). |
 | `BETTER_AUTH_SECRET` | Long random string (≥32 chars) |
 | `BETTER_AUTH_URL` | Your production URL, e.g. `https://devpulse-ai.vercel.app` |
 | `NEXT_PUBLIC_APP_URL` | **Same** as `BETTER_AUTH_URL` |
