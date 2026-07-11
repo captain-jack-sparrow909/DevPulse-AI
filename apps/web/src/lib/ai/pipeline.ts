@@ -2,6 +2,13 @@ import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
 import { collectAllSources, describeSourceMix, type RawSourceItem } from "@/lib/integrations";
 import { diversifySources } from "@/lib/research/ingest";
+import {
+  describeProviderCounts,
+  MAX_POSTS_PER_PROVIDER_PER_DAY,
+  orderCandidatesForSlot,
+  SLOT_LANE_LABELS,
+  SLOT_PROVIDER_ROTATION,
+} from "@/lib/research/diversity";
 import { DEFAULT_WRITING_STYLE } from "@/lib/constants";
 import { contentHash } from "@/lib/hash";
 import { chatCompletion, isAiConfigured } from "./client";
@@ -126,6 +133,15 @@ Source url: ${params.source.url}
 Source summary: ${params.source.summary || "n/a"}
 Provider: ${params.source.provider}
 
+Match the source type:
+- github → repo / tool / library angle (not every post should sound like this)
+- arxiv / huggingface → paper or model insight
+- hackernews / reddit → discussion takeaway or evidence-backed take
+- rss / devto → blog / engineering lesson
+- stackoverflow → practical howto
+- producthunt / tavily → product or discovery angle
+- x → short social signal expanded carefully
+
 Rules:
 ${params.rules}
 
@@ -133,6 +149,7 @@ LinkedIn:
 - Long-form, 500–2000 characters
 - Short paragraphs, senior-engineer voice
 - Educational, no clickbait
+- Do not force a "GitHub repo spotlight" framing unless provider is github
 
 X (Twitter):
 - Array of tweets. EACH tweet must be ≤ ${X_CHAR_LIMIT} characters (hard limit).
@@ -538,27 +555,39 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     );
 
     // Persist a diversified feed (not only topic-matched HN/arXiv)
-    const toStore = diversifySources(rawSources, 120, 14);
+    const toStore = diversifySources(rawSources, 120, 12);
     log(logs, `Storing diversified set: ${toStore.length} · ${describeSourceMix(toStore)}`, options.onLog);
 
     const keywords = topics.flatMap((t) => t.keywords.split(",").map((k) => k.trim())).filter(Boolean);
     // Rank full catalog for writing, but prefer diversity + unused
     const ranked = rankSources(rawSources, keywords);
 
-    // Prefer sources not already used in today's posts
+    // Prefer sources not already used in today's posts; also track providers
+    // so we don't ship 12 GitHub-repo posts in a row.
     const { start, end } = dayBoundsUtc(now, settings.timezone);
-    const usedSourceIds = new Set(
-      (
-        await prisma.postSource.findMany({
-          where: {
-            post: {
-              userId: options.userId,
-              createdAt: { gte: start, lte: end },
-            },
-          },
-          select: { sourceId: true },
-        })
-      ).map((r) => r.sourceId),
+    const todayLinks = await prisma.postSource.findMany({
+      where: {
+        post: {
+          userId: options.userId,
+          createdAt: { gte: start, lte: end },
+          status: { not: "skipped" },
+        },
+      },
+      select: {
+        sourceId: true,
+        source: { select: { provider: true } },
+      },
+    });
+    const usedSourceIds = new Set(todayLinks.map((r) => r.sourceId));
+    const usedProviderCounts = new Map<string, number>();
+    for (const link of todayLinks) {
+      const p = link.source.provider;
+      usedProviderCounts.set(p, (usedProviderCounts.get(p) ?? 0) + 1);
+    }
+    log(
+      logs,
+      `Today so far: ${usedSourceIds.size} sources used · providers ${describeProviderCounts(usedProviderCounts)} · max ${MAX_POSTS_PER_PROVIDER_PER_DAY}/provider`,
+      options.onLog,
     );
 
     const savedByKey = new Map<string, { id: string; item: RawSourceItem }>();
@@ -618,18 +647,37 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       savedByKey.set(key, { id: saved.id, item });
     }
 
-    // Order writing candidates: unused + high rank, diversified
+    // Pool: ranked + any stored leftovers not already in ranked list
     const rankedSaved = ranked
       .map((item) => savedByKey.get(`${item.provider}:${item.externalId.slice(0, 190)}`))
       .filter((x): x is { id: string; item: RawSourceItem } => Boolean(x));
 
-    const ordered = [
-      ...rankedSaved.filter((s) => !usedSourceIds.has(s.id)),
-      ...rankedSaved.filter((s) => usedSourceIds.has(s.id)),
-      ...[...savedByKey.values()].filter(
-        (s) => !rankedSaved.some((r) => r.id === s.id) && !usedSourceIds.has(s.id),
-      ),
-    ];
+    const poolMap = new Map<string, { id: string; item: RawSourceItem }>();
+    for (const s of rankedSaved) poolMap.set(s.id, s);
+    for (const s of savedByKey.values()) {
+      if (!poolMap.has(s.id)) poolMap.set(s.id, s);
+    }
+
+    // Slot lane rotation + daily provider quotas (not pure score — GitHub stars used to win every time)
+    const ordered = orderCandidatesForSlot([...poolMap.values()], {
+      slotIndex,
+      usedSourceIds,
+      usedProviderCounts,
+      maxPerProvider: MAX_POSTS_PER_PROVIDER_PER_DAY,
+    });
+
+    const lane =
+      SLOT_LANE_LABELS[slotIndex % SLOT_LANE_LABELS.length] ?? "mixed";
+    const preferred =
+      SLOT_PROVIDER_ROTATION[slotIndex % SLOT_PROVIDER_ROTATION.length] ?? [];
+    log(
+      logs,
+      `Slot ${slotIndex + 1} lane=${lane} · prefer [${preferred.join(", ")}] · top candidates: ${ordered
+        .slice(0, 6)
+        .map((c) => c.item.provider)
+        .join(" → ")}`,
+      options.onLog,
+    );
 
     await prisma.researchRun.update({
       where: { id: researchRun.id },
@@ -682,13 +730,24 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     let produced = 0;
     let lastError = "";
 
-    for (let attempt = 0; attempt < Math.min(8, ordered.length); attempt++) {
+    // Try more candidates so provider diversity can skip over-quota / weak fits
+    for (let attempt = 0; attempt < Math.min(14, ordered.length); attempt++) {
       const picked = ordered[attempt]!;
       const source = picked.item;
+      const providerUses = usedProviderCounts.get(source.provider) ?? 0;
+      if (providerUses >= MAX_POSTS_PER_PROVIDER_PER_DAY && attempt < ordered.length - 3) {
+        // Skip early if this provider is already at daily cap (unless few options left)
+        log(
+          logs,
+          `Skip ${source.provider} (already ${providerUses} today, max ${MAX_POSTS_PER_PROVIDER_PER_DAY}) — next candidate`,
+          options.onLog,
+        );
+        continue;
+      }
 
       log(
         logs,
-        `Writing dual pack (LinkedIn + X) for slot ${slotIndex + 1}: ${source.title.slice(0, 60)}…`,
+        `Writing dual pack (LinkedIn + X) for slot ${slotIndex + 1} [${source.provider}]: ${source.title.slice(0, 60)}…`,
         options.onLog,
       );
 

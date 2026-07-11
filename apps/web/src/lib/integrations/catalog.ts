@@ -70,17 +70,21 @@ export const REDDIT_SUBREDDITS = [
 
 export const ARXIV_CATEGORIES = ["cs.AI", "cs.LG", "cs.CL", "cs.CV", "cs.RO"] as const;
 
-/** Provider weight multipliers for ranking. */
+/**
+ * Provider weight multipliers for ranking (1–5).
+ * Keep these close — slot rotation + daily quotas handle mix; large gaps
+ * (or raw GitHub star counts) made every post a repo spotlight.
+ */
 export const PROVIDER_PRIORITY: Record<string, number> = {
-  github: 5,
+  hackernews: 5,
   arxiv: 5,
   huggingface: 5,
-  hackernews: 5,
-  reddit: 5,
-  rss: 4,
+  rss: 5,
+  reddit: 4,
+  github: 4, // repos are one lane, not the default day
   devto: 4,
   stackoverflow: 4,
-  producthunt: 3,
   tavily: 4,
+  producthunt: 3,
   x: 3, // paid / use lightly
 };

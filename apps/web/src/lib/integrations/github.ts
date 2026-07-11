@@ -49,14 +49,19 @@ export async function fetchGithubTrending(limit = 15): Promise<RawSourceItem[]> 
           if (!res.ok) return;
           const data = (await res.json()) as { items?: GhRepo[] };
           for (const repo of data.items ?? []) {
+            // Log-scale stars so 5k★ does not outrank every HN/arXiv/RSS item
+            // in the global feed (those live ~0–200 after provider boosts).
+            const stars = repo.stargazers_count ?? 0;
+            const forks = repo.forks_count ?? 0;
+            const engagement = Math.log10(stars + 1) * 22 + Math.log10(forks + 1) * 6;
             all.push({
               provider: "github",
               externalId: repo.full_name,
               title: `GitHub: ${repo.full_name}${repo.language ? ` (${repo.language})` : ""}`,
               url: repo.html_url,
               summary: repo.description || undefined,
-              score: repo.stargazers_count + repo.forks_count * 0.5,
-              priority: 5,
+              score: Math.round(engagement * 10) / 10,
+              priority: 4,
               raw: repo,
             });
           }

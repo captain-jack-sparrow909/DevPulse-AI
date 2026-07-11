@@ -20,14 +20,21 @@ Be strict. Generic AI filler should score below 7. Return strict JSON only.`,
   },
 } as const;
 
+/**
+ * Writing angles by slot. Aligned with SLOT_PROVIDER_ROTATION lanes so we
+ * don't default every post to "repo spotlight".
+ */
 export const ANGLES = [
-  "quick tip",
-  "thread outline",
-  "comparison",
-  "hot take (evidence-backed)",
-  "architecture breakdown",
-  "lessons learned",
-  "tutorial snippet",
-  "repo spotlight",
-  "paper insight",
+  "community takeaway", // HN / Reddit
+  "paper insight", // arXiv / HF
+  "engineering blog deep-dive", // RSS / Dev.to
+  "repo spotlight", // GitHub (only ~2 slots)
+  "tutorial snippet", // SO / Dev.to
+  "product / launch angle", // PH / Tavily
+  "quick tip", // HN / RSS
+  "research implication", // HF / arXiv
+  "hot take (evidence-backed)", // Reddit / X
+  "comparison", // GitHub / PH
+  "architecture breakdown", // RSS
+  "lessons learned", // Dev.to / SO
 ] as const;

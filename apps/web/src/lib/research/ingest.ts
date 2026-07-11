@@ -2,10 +2,11 @@ import { prisma } from "@/lib/db";
 import { collectAllSources, describeSourceMix, type RawSourceItem } from "@/lib/integrations";
 
 /**
- * Diversify the list so high-volume providers (HN/RSS) don't bury GitHub/HF/etc.
+ * Diversify the list so one provider cannot flood storage/ranking.
  * Take top N per provider, then fill remaining by score.
+ * (Writing-time mix is enforced separately via slot lanes + daily quotas.)
  */
-export function diversifySources(items: RawSourceItem[], maxTotal = 120, perProvider = 14): RawSourceItem[] {
+export function diversifySources(items: RawSourceItem[], maxTotal = 120, perProvider = 12): RawSourceItem[] {
   const byProvider = new Map<string, RawSourceItem[]>();
   for (const item of items) {
     const list = byProvider.get(item.provider) || [];
