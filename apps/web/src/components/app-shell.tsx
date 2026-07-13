@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import {
   LayoutDashboard,
   FileText,
@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
 import { APP_NAME } from "@/lib/constants";
+import { NavigationLoader } from "@/components/navigation-loader";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -135,6 +136,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh min-h-screen flex-col md:flex-row">
+      {/* Client navigations (posts, nav links, etc.) */}
+      <Suspense fallback={null}>
+        <NavigationLoader />
+      </Suspense>
+
       {/* Desktop sidebar */}
       <aside className="hidden w-[15.5rem] shrink-0 flex-col border-r border-white/[0.06] bg-[#0a0b10]/85 backdrop-blur-xl md:flex">
         <div className="border-b border-white/[0.06] px-5 py-5">

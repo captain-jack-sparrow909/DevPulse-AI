@@ -13,6 +13,7 @@ import {
   xThreadAsCopyText,
 } from "@/lib/content/platforms";
 import { cn } from "@/lib/utils";
+import { copyToClipboard } from "@/lib/clipboard";
 
 export function PostActions({
   postId,
@@ -80,29 +81,29 @@ export function PostActions({
   }
 
   async function copyText(kind: "linkedin" | "x" | `x-${number}`, text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(kind);
-      if (kind === "linkedin") {
-        setMessage(
-          imagePath
-            ? "LinkedIn copy ready. Paste on LinkedIn and attach the screenshot if useful."
-            : "LinkedIn text copied — paste into LinkedIn.",
-        );
-      } else if (kind === "x") {
-        setMessage(
-          imagePath
-            ? `X thread copied (${xParts.length} post${xParts.length === 1 ? "" : "s"}). Paste in order; attach screenshot on the first post if you want.`
-            : `X thread copied (${xParts.length} post${xParts.length === 1 ? "" : "s"}). Paste each tweet in order.`,
-        );
-      } else {
-        const n = Number(kind.slice(2)) + 1;
-        setMessage(`X post ${n} copied — paste into X.`);
-      }
-      setTimeout(() => setCopied(null), 2000);
-    } catch {
-      setMessage("Could not copy — select the text manually");
+    const ok = await copyToClipboard(text);
+    if (!ok) {
+      setMessage("Could not copy on this device — long-press the text field and choose Copy.");
+      return;
     }
+    setCopied(kind);
+    if (kind === "linkedin") {
+      setMessage(
+        imagePath
+          ? "LinkedIn copy ready. Paste on LinkedIn and attach the screenshot if useful."
+          : "LinkedIn text copied — paste into LinkedIn.",
+      );
+    } else if (kind === "x") {
+      setMessage(
+        imagePath
+          ? `X thread copied (${xParts.length} post${xParts.length === 1 ? "" : "s"}). Paste in order; attach screenshot on the first post if you want.`
+          : `X thread copied (${xParts.length} post${xParts.length === 1 ? "" : "s"}). Paste each tweet in order.`,
+      );
+    } else {
+      const n = Number(kind.slice(2)) + 1;
+      setMessage(`X post ${n} copied — paste into X.`);
+    }
+    setTimeout(() => setCopied(null), 2000);
   }
 
   function updateXPart(index: number, value: string) {
