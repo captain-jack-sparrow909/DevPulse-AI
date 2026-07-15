@@ -13,8 +13,8 @@ import { prisma } from "@/lib/db";
 import { DEFAULT_WRITING_STYLE } from "@/lib/constants";
 import { contentHash } from "@/lib/hash";
 import { isAiConfigured, chatCompletion } from "@/lib/ai/client";
-import { PROMPTS, ANGLES } from "@/lib/ai/prompts";
-import { heuristicScore } from "@/lib/ai/scoring";
+import { ANGLES } from "@/lib/ai/prompts";
+import { scoreDualDraft } from "@/lib/ai/scoring";
 import {
   buildSlotPlan,
   dayBoundsUtc,
@@ -24,16 +24,13 @@ import {
 } from "@/lib/schedule/slots";
 import { getOccupiedSlotIndexes, skipSlot } from "@/lib/schedule/slot-actions";
 import {
-  orderCandidatesForSlot,
   MAX_POSTS_PER_PROVIDER_PER_DAY,
   describeProviderCounts,
-  SLOT_LANE_LABELS,
-  SLOT_PROVIDER_ROTATION,
 } from "@/lib/research/diversity";
 import {
-  RESEARCH_CHUNKS,
   collectResearchChunk,
   researchChunkCount,
+  researchChunksForContentType,
 } from "@/lib/research/chunks";
 import type { RawSourceItem } from "@/lib/integrations/types";
 import {
@@ -42,6 +39,24 @@ import {
   X_CHAR_LIMIT,
 } from "@/lib/content/platforms";
 import { ensureUserDefaults } from "@/lib/ai/pipeline";
+import {
+  buildStrategyPrompt,
+  contentTypeForSlot,
+  orderCandidatesForStrategy,
+  projectSources,
+  type ContentType,
+} from "@/lib/content/strategy";
+import {
+  buildEngagementPrompt,
+  engagementBriefForSlot,
+  maxTextSimilarity,
+  parseDraftCandidates,
+  selectBestDraft,
+  type DualDraft,
+  type EngagementBrief,
+} from "@/lib/content/engagement";
+import { upsertResearchSources } from "@/lib/research/source-store";
+import { filterSourcesForContentType } from "@/lib/research/source-policy";
 
 export interface PhaseResult {
   jobId: string | null;
@@ -65,6 +80,8 @@ export interface PhasedJobMeta {
   nextChunkIndex: number;
   totalChunks: number;
   generationJobId: string;
+  /** Optional only for compatibility with jobs created before product-first research. */
+  contentType?: ContentType;
 }
 
 function log(logs: string[], message: string) {
@@ -81,6 +98,15 @@ function parseMeta(raw: string | null | undefined): PhasedJobMeta | null {
     /* ignore */
   }
   return null;
+}
+
+function parseRawJson(raw: string | null): unknown {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 async function appendJobLogs(jobId: string, logs: string[], existingJson?: string | null) {
@@ -103,35 +129,7 @@ async function persistSources(
   researchRunId: string,
   items: RawSourceItem[],
 ): Promise<number> {
-  let n = 0;
-  for (const item of items) {
-    const externalId = item.externalId.slice(0, 190);
-    await prisma.source.upsert({
-      where: {
-        provider_externalId: { provider: item.provider, externalId },
-      },
-      create: {
-        provider: item.provider,
-        externalId,
-        title: item.title.slice(0, 500),
-        url: item.url,
-        summary: item.summary?.slice(0, 2000),
-        score: item.score ?? 0,
-        rawJson: item.raw ? JSON.stringify(item.raw).slice(0, 50_000) : null,
-        researchRunId,
-      },
-      update: {
-        title: item.title.slice(0, 500),
-        url: item.url,
-        summary: item.summary?.slice(0, 2000),
-        score: item.score ?? 0,
-        researchRunId,
-        fetchedAt: new Date(),
-      },
-    });
-    n++;
-  }
-  return n;
+  return (await upsertResearchSources(researchRunId, items, 4)).size;
 }
 
 /**
@@ -143,6 +141,7 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
   const logs: string[] = [];
   const now = new Date();
   const settings = await ensureUserDefaults(userId);
+  const strategy = settings.contentStrategy;
   const plan = buildSlotPlan(
     now,
     settings.timezone,
@@ -181,10 +180,34 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
   if (openJob?.researchRunId) {
     const meta = parseMeta(openJob.researchRun?.topicsRanked);
     if (meta && meta.generationJobId === openJob.id) {
-      if (openJob.status === "write" || openJob.status === "writing") {
-        return runWritePhase(userId, openJob.id, openJob.researchRunId, meta, logs);
+      const contentType =
+        meta.contentType ??
+        contentTypeForSlot(meta.slotIndex, strategy.contentMix).type;
+      const normalizedMeta: PhasedJobMeta = {
+        ...meta,
+        contentType,
+        totalChunks: researchChunkCount(contentType),
+        nextChunkIndex: Math.min(
+          meta.nextChunkIndex,
+          researchChunkCount(contentType),
+        ),
+      };
+      if (!meta.contentType || meta.totalChunks !== normalizedMeta.totalChunks) {
+        await prisma.researchRun.update({
+          where: { id: openJob.researchRunId },
+          data: { topicsRanked: JSON.stringify(normalizedMeta) },
+        });
       }
-      return runResearchChunkPhase(userId, openJob.id, openJob.researchRunId, meta, logs);
+      if (openJob.status === "write" || openJob.status === "writing") {
+        return runWritePhase(userId, openJob.id, openJob.researchRunId, normalizedMeta, logs);
+      }
+      return runResearchChunkPhase(
+        userId,
+        openJob.id,
+        openJob.researchRunId,
+        normalizedMeta,
+        logs,
+      );
     }
   }
 
@@ -228,6 +251,11 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
     data: { userId, status: "running" },
   });
 
+  const ownedProjectSources = await persistSources(
+    researchRun.id,
+    projectSources(strategy),
+  );
+
   const job = await prisma.generationJob.create({
     data: {
       userId,
@@ -239,23 +267,31 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
     },
   });
 
+  const contentType = contentTypeForSlot(
+    pick.slotIndex,
+    strategy.contentMix,
+  ).type;
   const meta: PhasedJobMeta = {
     kind: "phased_v1",
     slotIndex: pick.slotIndex,
     scheduledFor: pick.scheduledFor.toISOString(),
     nextChunkIndex: 0,
-    totalChunks: researchChunkCount(),
+    totalChunks: researchChunkCount(contentType),
     generationJobId: job.id,
+    contentType,
   };
 
   await prisma.researchRun.update({
     where: { id: researchRun.id },
-    data: { topicsRanked: JSON.stringify(meta) },
+    data: {
+      topicsRanked: JSON.stringify(meta),
+      sourcesFound: ownedProjectSources,
+    },
   });
 
   log(
     logs,
-    `Started phased job for slot ${pick.slotIndex + 1} · ${formatSlotDateTime(pick.scheduledFor, plan.timezone)} · mode=${pick.mode} · ${meta.totalChunks} research chunks + 1 write`,
+    `Started phased job for slot ${pick.slotIndex + 1} · ${formatSlotDateTime(pick.scheduledFor, plan.timezone)} · mode=${pick.mode} · strategy=${contentType} · ${ownedProjectSources} owned projects + ${meta.totalChunks} targeted research chunks + 1 write`,
   );
   await appendJobLogs(job.id, logs);
 
@@ -271,8 +307,14 @@ async function runResearchChunkPhase(
 ): Promise<PhaseResult> {
   const logs = [...seedLogs];
   const chunkIndex = meta.nextChunkIndex;
+  const settings = await ensureUserDefaults(userId);
+  const strategy = settings.contentStrategy;
+  const contentType =
+    meta.contentType ??
+    contentTypeForSlot(meta.slotIndex, strategy.contentMix).type;
+  const researchPlan = researchChunksForContentType(contentType);
 
-  if (chunkIndex >= meta.totalChunks) {
+  if (chunkIndex >= researchPlan.length) {
     // All research done → move to write
     await prisma.generationJob.update({
       where: { id: jobId },
@@ -283,14 +325,18 @@ async function runResearchChunkPhase(
     return runWritePhase(userId, jobId, researchRunId, meta, []);
   }
 
-  const def = RESEARCH_CHUNKS[chunkIndex]!;
+  const def = researchPlan[chunkIndex]!;
   log(
     logs,
     `Research chunk ${chunkIndex + 1}/${meta.totalChunks}: ${def.label} (${def.id})…`,
   );
 
   try {
-    const { items, mix } = await collectResearchChunk(chunkIndex);
+    const { items, mix } = await collectResearchChunk(
+      chunkIndex,
+      contentType,
+      strategy,
+    );
     const stored = await persistSources(researchRunId, items);
 
     const run = await prisma.researchRun.findUnique({ where: { id: researchRunId } });
@@ -299,6 +345,8 @@ async function runResearchChunkPhase(
     const nextMeta: PhasedJobMeta = {
       ...meta,
       nextChunkIndex: chunkIndex + 1,
+      totalChunks: researchPlan.length,
+      contentType,
     };
 
     await prisma.researchRun.update({
@@ -372,6 +420,7 @@ async function runWritePhase(
   const useAi = isAiConfigured();
   const now = new Date();
   const settings = await ensureUserDefaults(userId);
+  const strategy = settings.contentStrategy;
   const plan = buildSlotPlan(
     now,
     settings.timezone,
@@ -417,14 +466,20 @@ async function runWritePhase(
       .flatMap((t) => t.keywords.split(",").map((k) => k.trim()))
       .filter(Boolean);
 
-    const asRaw: RawSourceItem[] = dbSources.map((s) => ({
-      provider: s.provider as RawSourceItem["provider"],
-      externalId: s.externalId,
-      title: s.title,
-      url: s.url,
-      summary: s.summary ?? undefined,
-      score: s.score,
-    }));
+    const contentType = contentTypeForSlot(slotIndex, strategy.contentMix);
+    const asRaw: RawSourceItem[] = filterSourcesForContentType(
+      dbSources.map((s) => ({
+        provider: s.provider as RawSourceItem["provider"],
+        externalId: s.externalId,
+        title: s.title,
+        url: s.url,
+        summary: s.summary ?? undefined,
+        score: s.score,
+        raw: parseRawJson(s.rawJson),
+      })),
+      contentType.type,
+      strategy,
+    );
 
     // Topic boost
     const ranked = [...asRaw]
@@ -470,38 +525,40 @@ async function runWritePhase(
       })
       .filter((x): x is { id: string; item: RawSourceItem } => Boolean(x));
 
-    const ordered = orderCandidatesForSlot(candidates, {
-      slotIndex,
+    const ordered = orderCandidatesForStrategy(candidates, {
+      strategy,
+      contentType: contentType.type,
       usedSourceIds,
       usedProviderCounts,
       maxPerProvider: MAX_POSTS_PER_PROVIDER_PER_DAY,
     });
 
-    const lane = SLOT_LANE_LABELS[slotIndex % SLOT_LANE_LABELS.length] ?? "mixed";
-    const preferred = SLOT_PROVIDER_ROTATION[slotIndex % SLOT_PROVIDER_ROTATION.length] ?? [];
     log(
       logs,
-      `Lane=${lane} prefer=[${preferred.join(",")}] top=${ordered
+      `Strategy type=${contentType.type} · audience-first top=${ordered
         .slice(0, 5)
         .map((c) => c.item.provider)
         .join("→")}`,
     );
 
-    const existingHashes = new Set(
-      (
-        await prisma.post.findMany({
-          where: { userId },
-          select: { contentHash: true },
-          take: 500,
-          orderBy: { createdAt: "desc" },
-        })
-      ).map((p) => p.contentHash),
-    );
+    const recentPosts = await prisma.post.findMany({
+      where: { userId },
+      select: { contentHash: true, hook: true, content: true },
+      take: 500,
+      orderBy: { createdAt: "desc" },
+    });
+    const existingHashes = new Set(recentPosts.map((post) => post.contentHash));
+    const recentHooks = recentPosts
+      .map((post) => post.hook || post.content.split("\n")[0] || "")
+      .filter(Boolean)
+      .slice(0, 100);
 
     const stylePrompt = style?.systemPrompt || DEFAULT_WRITING_STYLE.systemPrompt;
     const rules = style?.rules || DEFAULT_WRITING_STYLE.rules;
     const threshold = settings.qualityThreshold;
-    const angle = ANGLES[slotIndex % ANGLES.length]!;
+    const angle = contentType.label || ANGLES[slotIndex % ANGLES.length]!;
+    const strategyPrompt = buildStrategyPrompt(strategy, contentType);
+    const engagementBrief = engagementBriefForSlot(slotIndex, contentType);
 
     let produced = 0;
     let lastError = "";
@@ -510,23 +567,55 @@ async function runWritePhase(
       const picked = ordered[attempt]!;
       const source = picked.item;
       const providerUses = usedProviderCounts.get(source.provider) ?? 0;
-      if (providerUses >= MAX_POSTS_PER_PROVIDER_PER_DAY && attempt < ordered.length - 2) {
+      if (
+        source.provider !== "project" &&
+        providerUses >= MAX_POSTS_PER_PROVIDER_PER_DAY &&
+        attempt < ordered.length - 2
+      ) {
         log(logs, `Skip ${source.provider} (quota)`);
         continue;
       }
 
       log(logs, `Writing from [${source.provider}] ${source.title.slice(0, 70)}…`);
 
-      let draft = useAi
-        ? await writeDual(source, angle, stylePrompt, rules)
-        : demoDual(source, angle);
+      const candidates: DualDraft[] = useAi
+        ? await writeDual(source, angle, stylePrompt, rules, strategyPrompt, engagementBrief)
+        : [demoDual(source, angle)];
 
-      draft.xThread = enforceXLimit(draft.xThread);
-      const scores = heuristicScore(draft.linkedIn, "linkedin");
+      const selected = selectBestDraft(candidates, source.url, engagementBrief, {
+        provider: source.provider,
+        title: source.title,
+        summary: source.summary,
+      });
+      if (!selected) {
+        lastError = "Writer returned no valid candidate packs";
+        log(logs, `${lastError}, next source…`);
+        continue;
+      }
 
-      if (scores.overall < threshold - 3 && useAi) {
-        lastError = `Low score ${scores.overall}`;
-        log(logs, `Reject score ${scores.overall}, next source…`);
+      const { draft, audit } = selected;
+
+      log(logs, `Selected best of ${candidates.length} candidate(s), engagement ${audit.score}/10`);
+      if (audit.warnings.length) log(logs, `Draft warnings: ${audit.warnings.join("; ")}`);
+
+      if (audit.hardFailures.length && useAi) {
+        lastError = audit.hardFailures.join("; ");
+        log(logs, `Reject draft: ${lastError}, next source…`);
+        continue;
+      }
+
+      const scores = scoreDualDraft(draft, audit);
+
+      if ((audit.score < 5.8 || scores.overall < threshold - 3) && useAi) {
+        lastError = `Low quality: engagement ${audit.score}, overall ${scores.overall}`;
+        log(logs, `Reject ${lastError}, next source…`);
+        continue;
+      }
+
+      const hookSimilarity = maxTextSimilarity(draft.hook, recentHooks);
+      if (hookSimilarity > 0.72 && useAi) {
+        lastError = `Repetitive hook (${Math.round(hookSimilarity * 100)}% similar)`;
+        log(logs, `Reject ${lastError}, next source…`);
         continue;
       }
 
@@ -693,8 +782,10 @@ async function writeDual(
   angle: string,
   stylePrompt: string,
   rules: string,
-) {
-  const user = `Write ONE idea as two platform formats from the same source.
+  strategyPrompt: string,
+  engagementBrief: EngagementBrief,
+): Promise<DualDraft[]> {
+  const user = `Turn ONE source into platform-native social content.
 
 Angle: ${angle}
 Source title: ${source.title}
@@ -702,59 +793,33 @@ Source url: ${source.url}
 Source summary: ${source.summary || "n/a"}
 Provider: ${source.provider}
 
-Match the source type (github→repo, arxiv→paper, hn/reddit→discussion, rss/devto→blog, so→howto, etc.).
+Content strategy:
+${strategyPrompt}
+
+Match the source type (project→owned-project lesson using only supplied facts, github/official RSS→architecture or discovery, arxiv/Hugging Face→selective research, HN/Reddit→evidence-backed opinion only).
 
 Rules:
 ${rules}
 
-LinkedIn: 500–2000 chars, short paragraphs, senior-engineer voice.
-X: array of tweets each ≤ ${X_CHAR_LIMIT} chars. URL in last tweet when possible.
-
-Return JSON only:
-{"title":"...","hook":"...","linkedin":"...","xThread":["..."]}`;
+${buildEngagementPrompt(engagementBrief)}`;
 
   const raw = await chatCompletion({
     system:
       stylePrompt +
-      "\n\nAlways produce both LinkedIn long-form and an X thread with hard 280-char limits per tweet.",
+      "\n\nProduce factual, ready-to-paste LinkedIn and X copy. Follow the JSON schema exactly.",
     user,
-    temperature: 0.75,
+    temperature: 0.82,
+    maxTokens: 3200,
     json: true,
   });
-
-  try {
-    const parsed = JSON.parse(raw) as {
-      title?: string;
-      hook?: string;
-      linkedin?: string;
-      linkedIn?: string;
-      content?: string;
-      xThread?: string[];
-    };
-    const linkedIn = (parsed.linkedin || parsed.linkedIn || parsed.content || raw).trim();
-    let xThread = enforceXLimit(
-      parsed.xThread?.length ? parsed.xThread.map(String) : splitIntoXChunks(linkedIn),
-    );
-    if (xThread.length === 0) xThread = splitIntoXChunks(linkedIn);
-    return {
-      title: parsed.title || source.title.slice(0, 100),
-      hook: parsed.hook || linkedIn.split("\n")[0] || "",
-      linkedIn,
-      xThread,
-    };
-  } catch {
-    return {
-      title: source.title.slice(0, 100),
-      hook: raw.split("\n")[0] || "",
-      linkedIn: raw.slice(0, 2000),
-      xThread: splitIntoXChunks(raw),
-    };
-  }
+  return parseDraftCandidates(raw, source.title);
 }
 
 /** Minimum ms we must have left before starting the next phase. */
 async function minMsForNextPhase(userId: string): Promise<number> {
-  const settings = await ensureUserDefaults(userId);
+  const settings =
+    (await prisma.userSettings.findUnique({ where: { userId } })) ||
+    (await ensureUserDefaults(userId));
   const { start, end } = dayBoundsUtc(new Date(), settings.timezone);
   const open = await prisma.generationJob.findFirst({
     where: {

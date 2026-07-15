@@ -32,7 +32,7 @@ export function splitIntoXChunks(text: string, limit = X_CHAR_LIMIT): string[] {
       break;
     }
 
-    let slice = remaining.slice(0, limit);
+    const slice = remaining.slice(0, limit);
     // Prefer break at paragraph
     let breakAt = Math.max(slice.lastIndexOf("\n\n"), slice.lastIndexOf("\n"));
     if (breakAt < limit * 0.4) {

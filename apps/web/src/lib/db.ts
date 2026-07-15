@@ -6,23 +6,18 @@ const globalForPrisma = globalThis as unknown as {
 
 /**
  * Resolve DB URL:
- * - On Vercel, prefer pooler (DATABASE_URL_POOLED or DATABASE_URL with :6543)
- *   Direct :5432 often fails from serverless ("Can't reach database server").
- * - Locally, direct :5432 is fine for a small connection pool.
+ * - Prefer the explicit transaction-pooler URL when one is configured.
+ * - Always add Prisma's PgBouncer compatibility parameters to a :6543 URL,
+ *   including during local development. Supavisor transaction mode cannot
+ *   safely use session-level prepared statements.
+ * - Fall back to DATABASE_URL unchanged for direct or session connections.
  */
 function resolveDatabaseUrl(): string | undefined {
   const primary = process.env.DATABASE_URL?.trim();
   const pooled = process.env.DATABASE_URL_POOLED?.trim();
-  const onVercel = process.env.VERCEL === "1";
 
-  if (onVercel) {
-    // Prefer explicit pooler URL
-    if (pooled && pooled.includes(":6543")) return ensurePoolerParams(pooled);
-    if (primary && primary.includes(":6543")) return ensurePoolerParams(primary);
-    // Fall back to whatever is set (may still fail if only direct)
-    return primary;
-  }
-
+  if (pooled && pooled.includes(":6543")) return ensurePoolerParams(pooled);
+  if (primary && primary.includes(":6543")) return ensurePoolerParams(primary);
   return primary;
 }
 

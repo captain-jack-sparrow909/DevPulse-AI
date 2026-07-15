@@ -37,7 +37,7 @@ In **Project → Settings → Environment Variables**, add for **Production**:
 |------|--------|
 | `DATABASE_URL` | Prefer Supabase **pooler** `:6543` (`…pooler.supabase.com:6543/…?pgbouncer=true&connection_limit=5&sslmode=require`). **Do not** use only `db.…supabase.co:5432` on Vercel — cron will fail with “Can't reach database server”. |
 | `DATABASE_URL_POOLED` | Optional backup of the pooler URL. On Vercel the app prefers this if set. |
-| `DIRECT_URL` | Direct `:5432` for local `prisma db push` only (optional on Vercel runtime). |
+| `DIRECT_URL` | Supavisor **session pooler** `:5432` for `prisma db push`. Use the direct `db.…:5432` URL only with IPv6 or Supabase's IPv4 add-on. |
 | `BETTER_AUTH_SECRET` | Long random string (≥32 chars) |
 | `BETTER_AUTH_URL` | Your production URL, e.g. `https://devpulse-ai.vercel.app` |
 | `NEXT_PUBLIC_APP_URL` | **Same** as `BETTER_AUTH_URL` |
@@ -66,6 +66,8 @@ Click **Deploy**. Build runs `prisma generate` + `next build`.
 
 If Prisma fails: confirm `DATABASE_URL` / `DIRECT_URL`, and that you already ran `npx prisma db push` against Supabase locally.
 
+For `prisma db push` on an IPv4-only network, copy the **Session pooler** URI from Supabase's **Connect** panel into `DIRECT_URL`. The direct `db.…supabase.co:5432` hostname resolves to IPv6 unless the IPv4 add-on is enabled.
+
 ### Cron error: `Can't reach database server at db.…:5432`
 
 Vercel is using the **direct** host. Serverless often cannot reach it reliably.
@@ -93,11 +95,12 @@ Authorization: Bearer YOUR_CRON_SECRET
 Each call:
 1. Returns **202 in under 1s** (cron-job.org 30s cap) then runs work via `waitUntil` **in the same invocation** (no self-HTTP — Vercel returns **508 Infinite loop** if the route fetches itself).
 2. Inside ~**52s**, runs as many phases as fit:
-   - Chunk 1: HN + Reddit  
-   - Chunk 2: GitHub + arXiv + Hugging Face  
-   - Chunk 3: RSS + Dev.to  
-   - Chunk 4: SO + Product Hunt + Tavily (+ light X)  
-   - **Write** dual post from stored sources  
+   - Project lesson: no external research chunk
+   - Architecture: product-relevant GitHub + priority-5 official RSS
+   - Benchmark: selective product-related arXiv + Hugging Face
+   - Opinion: limited product-relevant HN + Reddit
+   - Curated discovery: architecture chunk + selective research chunk
+   - **Write** dual post from stored sources
 3. If the budget ends mid-job, status stays `research`/`write` and the **next 15‑min cron resumes** (often finishes write alone).
 4. Preps ~**50 min before** due. Screenshots: use **Recapture** in the UI.
 

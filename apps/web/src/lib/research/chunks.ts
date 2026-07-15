@@ -1,17 +1,12 @@
-import { PROVIDER_PRIORITY } from "@/lib/integrations/catalog";
-import { fetchArxiv } from "@/lib/integrations/arxiv";
-import { fetchDevTo } from "@/lib/integrations/devto";
-import { fetchGithubTrending } from "@/lib/integrations/github";
-import { fetchHackerNews } from "@/lib/integrations/hackernews";
-import { fetchHuggingFace } from "@/lib/integrations/huggingface";
-import { fetchProductHunt } from "@/lib/integrations/producthunt";
-import { fetchReddit } from "@/lib/integrations/reddit";
-import { fetchRssFeeds } from "@/lib/integrations/rss";
-import { fetchStackOverflow } from "@/lib/integrations/stackoverflow";
-import { fetchTavily } from "@/lib/integrations/tavily";
-import { fetchXResearch } from "@/lib/integrations/x-research";
+import type {
+  ContentStrategyConfig,
+  ContentType,
+} from "@/lib/content/strategy";
 import type { RawSourceItem } from "@/lib/integrations/types";
-import { describeSourceMix } from "@/lib/integrations";
+import {
+  collectAllSources,
+  describeSourceMix,
+} from "@/lib/integrations";
 
 /**
  * Research is split into sequential chunks so each Vercel invocation stays
@@ -23,124 +18,66 @@ export interface ResearchChunkDef {
   label: string;
   /** Soft budget hint for logs */
   budgetMs: number;
-  collect: () => Promise<RawSourceItem[]>;
+  providers: RawSourceItem["provider"][];
 }
 
-async function settled(p: Promise<RawSourceItem[]>): Promise<RawSourceItem[]> {
-  try {
-    return await p;
-  } catch {
-    return [];
-  }
-}
-
-function scoreItems(items: RawSourceItem[]): RawSourceItem[] {
-  return items.map((item) => {
-    const providerBoost = (PROVIDER_PRIORITY[item.provider] ?? 3) * 8;
-    const priorityBoost = (item.priority ?? 3) * 5;
-    return {
-      ...item,
-      score: (item.score ?? 0) + providerBoost + priorityBoost,
-    };
-  });
-}
-
-/** Chunk 0 — community signal */
+/** Community is intentionally isolated to the low-frequency opinion lane. */
 const chunkCommunity: ResearchChunkDef = {
-  id: "community",
-  label: "HN + Reddit",
-  budgetMs: 25_000,
-  collect: async () => {
-    const [hn, reddit] = await Promise.all([
-      settled(fetchHackerNews(15)),
-      settled(
-        fetchReddit({
-          limitPerSub: 4,
-          subs: ["MachineLearning", "LocalLLaMA", "programming", "typescript", "artificial"],
-          fast: true,
-          timeoutMs: 5_000,
-        }),
-      ),
-    ]);
-    return scoreItems([...hn, ...reddit]);
-  },
+  id: "limited_community",
+  label: "Limited community evidence (HN + Reddit)",
+  budgetMs: 12_000,
+  providers: ["hackernews", "reddit"],
 };
 
-/** Chunk 1 — code + papers */
-const chunkCodeResearch: ResearchChunkDef = {
-  id: "code_research",
-  label: "GitHub + arXiv + Hugging Face",
-  budgetMs: 25_000,
-  collect: async () => {
-    const [gh, arxiv, hf] = await Promise.all([
-      settled(fetchGithubTrending(12)),
-      settled(fetchArxiv(10)),
-      settled(fetchHuggingFace(10)),
-    ]);
-    return scoreItems([...gh, ...arxiv, ...hf]);
-  },
+/** GitHub and RSS only support architecture/discovery tied to the products. */
+const chunkEngineering: ResearchChunkDef = {
+  id: "product_engineering",
+  label: "Product-relevant GitHub + official engineering RSS",
+  budgetMs: 15_000,
+  providers: ["github", "rss"],
 };
 
-/** Chunk 2 — blogs */
-const chunkBlogs: ResearchChunkDef = {
-  id: "blogs",
-  label: "RSS + Dev.to",
-  budgetMs: 25_000,
-  collect: async () => {
-    const [rss, devto] = await Promise.all([
-      settled(
-        fetchRssFeeds({
-          perFeed: 3,
-          maxFeeds: 12,
-          minPriority: 4,
-          timeoutMs: 6_000,
-        }),
-      ),
-      settled(fetchDevTo(12, { tags: ["ai", "typescript", "webdev"], timeoutMs: 7_000 })),
-    ]);
-    return scoreItems([...rss, ...devto]);
-  },
+/** Papers/models only support benchmark and curated-research slots. */
+const chunkSelectiveResearch: ResearchChunkDef = {
+  id: "selective_research",
+  label: "Selective product-related arXiv + Hugging Face",
+  budgetMs: 15_000,
+  providers: ["arxiv", "huggingface"],
 };
 
-/** Chunk 3 — Q&A + discovery */
-const chunkDiscovery: ResearchChunkDef = {
-  id: "discovery",
-  label: "SO + Product Hunt + Tavily + light X",
-  budgetMs: 25_000,
-  collect: async () => {
-    const [so, ph, tavily, x] = await Promise.all([
-      settled(
-        fetchStackOverflow(10, {
-          tags: ["typescript", "llm", "reactjs", "next.js"],
-          timeoutMs: 7_000,
-        }),
-      ),
-      settled(fetchProductHunt(6)),
-      settled(fetchTavily(6, { queries: 2, timeoutMs: 10_000 })),
-      settled(fetchXResearch(8)),
-    ]);
-    return scoreItems([...so, ...ph, ...tavily, ...x]);
-  },
+const RESEARCH_PLAN: Record<ContentType, ResearchChunkDef[]> = {
+  project_lesson: [],
+  architecture_breakdown: [chunkEngineering],
+  evidence_opinion: [chunkCommunity],
+  experiment_benchmark: [chunkSelectiveResearch],
+  curated_discovery: [chunkEngineering, chunkSelectiveResearch],
 };
 
-export const RESEARCH_CHUNKS: ResearchChunkDef[] = [
-  chunkCommunity,
-  chunkCodeResearch,
-  chunkBlogs,
-  chunkDiscovery,
-];
+export function researchChunksForContentType(
+  contentType: ContentType,
+): ResearchChunkDef[] {
+  return RESEARCH_PLAN[contentType];
+}
 
-export function researchChunkCount(): number {
-  return RESEARCH_CHUNKS.length;
+export function researchChunkCount(contentType: ContentType): number {
+  return researchChunksForContentType(contentType).length;
 }
 
 export async function collectResearchChunk(
   chunkIndex: number,
+  contentType: ContentType,
+  strategy: ContentStrategyConfig,
 ): Promise<{ chunk: ResearchChunkDef; items: RawSourceItem[]; mix: string }> {
-  const chunk = RESEARCH_CHUNKS[chunkIndex];
+  const chunk = researchChunksForContentType(contentType)[chunkIndex];
   if (!chunk) {
-    throw new Error(`Invalid research chunk index ${chunkIndex}`);
+    throw new Error(`Invalid ${contentType} research chunk index ${chunkIndex}`);
   }
-  const items = await chunk.collect();
+  const items = await collectAllSources({
+    mode: "fast",
+    budgetMs: chunk.budgetMs,
+    contentType,
+    strategy,
+    providers: chunk.providers,
+  });
   return { chunk, items, mix: describeSourceMix(items) };
 }

@@ -90,6 +90,7 @@ export interface FetchRssOptions {
   perFeed?: number;
   maxFeeds?: number;
   minPriority?: number;
+  categories?: RssFeed["category"][];
   timeoutMs?: number;
 }
 
@@ -107,6 +108,10 @@ export async function fetchRssFeeds(
   let feeds = [...RSS_FEEDS];
   if (opts.minPriority != null) {
     feeds = feeds.filter((f) => f.priority >= opts.minPriority!);
+  }
+  if (opts.categories?.length) {
+    const categories = new Set(opts.categories);
+    feeds = feeds.filter((feed) => categories.has(feed.category));
   }
   // Highest priority first when capping
   feeds.sort((a, b) => b.priority - a.priority);

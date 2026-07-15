@@ -1,12 +1,13 @@
 import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { SettingsForm } from "@/components/settings-form";
+import { getContentStrategy } from "@/lib/content/strategy-store";
 
 export default async function SettingsPage() {
   const session = await requireUser();
   const userId = session.user.id;
 
-  const [settings, topics, styles, models] = await Promise.all([
+  const [settings, topics, styles, models, strategy] = await Promise.all([
     prisma.userSettings.upsert({
       where: { userId },
       create: { userId },
@@ -15,6 +16,7 @@ export default async function SettingsPage() {
     prisma.topic.findMany({ where: { userId }, orderBy: { name: "asc" } }),
     prisma.writingStyle.findMany({ where: { userId }, orderBy: { name: "asc" } }),
     prisma.modelConfig.findMany({ where: { userId }, orderBy: { name: "asc" } }),
+    getContentStrategy(userId),
   ]);
 
   return (
@@ -38,6 +40,7 @@ export default async function SettingsPage() {
         topics={topics}
         styles={styles}
         models={models}
+        strategy={strategy}
       />
     </div>
   );

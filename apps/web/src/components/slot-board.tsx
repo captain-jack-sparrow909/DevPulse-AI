@@ -116,7 +116,6 @@ export function SlotBoard({ slots }: { slots: SlotBoardItem[] }) {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {slots.map((slot) => {
               const n = slot.slotIndex + 1;
-              const busy = busyKey === `skip-${slot.slotIndex}` || busyKey === `regen-${slot.slotIndex}`;
               const tone = slot.isSkipped
                 ? "border-white/[0.06] bg-white/[0.02] text-zinc-400"
                 : slot.isFilled

@@ -160,8 +160,8 @@ export function GeneratePanel({
           </div>
 
           <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2 text-xs text-violet-100/90">
-            <strong className="text-violet-200">Automatic (chunked):</strong> each cron packs as many
-            steps as fit in ~52s (HN/Reddit → GitHub/arXiv/HF → RSS/Dev.to → SO/PH/Tavily → write).
+            <strong className="text-violet-200">Automatic (product-first):</strong> each slot uses owned
+            project facts plus only its targeted lane: GitHub/official RSS, arXiv/HF, or limited HN/Reddit.
             Sources save between chunks. If time runs out, the{" "}
             <strong className="text-violet-100">next 15‑min cron continues</strong> (including write).
             No self-HTTP chain (Vercel blocks that with 508). Screenshots: Recapture on the post.

@@ -1,16 +1,21 @@
-import { PROVIDER_PRIORITY, RSS_FEEDS, REDDIT_SUBREDDITS } from "./catalog";
+import { PROVIDER_PRIORITY } from "./catalog";
 import { fetchArxiv } from "./arxiv";
-import { fetchDevTo } from "./devto";
 import { fetchGithubTrending } from "./github";
 import { fetchHackerNews } from "./hackernews";
 import { fetchHuggingFace } from "./huggingface";
-import { fetchProductHunt } from "./producthunt";
 import { fetchReddit } from "./reddit";
 import { fetchRssFeeds } from "./rss";
-import { fetchStackOverflow } from "./stackoverflow";
-import { fetchTavily } from "./tavily";
-import { fetchXResearch } from "./x-research";
-import type { RawSourceItem } from "./types";
+import type { RawSourceItem, ResearchProvider } from "./types";
+import {
+  DEFAULT_CONTENT_STRATEGY,
+  type ContentStrategyConfig,
+  type ContentType,
+} from "@/lib/content/strategy";
+import {
+  externalProvidersForContentType,
+  filterSourcesForContentType,
+  PRODUCT_RESEARCH_TERMS,
+} from "@/lib/research/source-policy";
 
 export type { RawSourceItem, ResearchProvider } from "./types";
 export { RSS_FEEDS, REDDIT_SUBREDDITS, ARXIV_CATEGORIES } from "./catalog";
@@ -25,6 +30,11 @@ export interface CollectOptions {
   mode?: CollectMode;
   /** Hard wall-clock cap for all collectors (ms). */
   budgetMs?: number;
+  /** Source lanes are selected from the post strategy, never from a global firehose. */
+  contentType?: ContentType;
+  strategy?: ContentStrategyConfig;
+  /** Used by phased chunks to collect one bounded provider group at a time. */
+  providers?: readonly ResearchProvider[];
 }
 
 async function settled(label: string, p: Promise<RawSourceItem[]>): Promise<{ label: string; items: RawSourceItem[] }> {
@@ -58,11 +68,10 @@ function dedupeAndScore(all: RawSourceItem[]): RawSourceItem[] {
   return deduped.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }
 
-/** High-signal subs only — full list was 15× hosts×UAs and burned the 60s budget. */
+/** Community is only used for the low-frequency evidence-opinion lane. */
 const FAST_REDDIT_SUBS = [
   "MachineLearning",
   "LocalLLaMA",
-  "programming",
   "typescript",
 ] as const;
 
@@ -75,66 +84,77 @@ const FAST_REDDIT_SUBS = [
  */
 export async function collectAllSources(options: CollectOptions = {}): Promise<RawSourceItem[]> {
   const mode = options.mode ?? "fast";
+  const contentType = options.contentType ?? "curated_discovery";
+  const strategy = options.strategy ?? DEFAULT_CONTENT_STRATEGY;
   const budgetMs =
     options.budgetMs ??
     (mode === "fast" ? 20_000 : 50_000);
+  const policyProviders = new Set(
+    options.providers ?? externalProvidersForContentType(contentType),
+  );
 
   const bag: RawSourceItem[] = [];
   const push = (items: RawSourceItem[]) => {
     for (const i of items) bag.push(i);
   };
 
-  const tasks: Promise<void>[] =
-    mode === "fast"
-      ? [
-          // Lean parallel set — enough diversity for slot lanes without stampeding
-          settled("hackernews", fetchHackerNews(8)).then((r) => push(r.items)),
-          settled("github", fetchGithubTrending(6)).then((r) => push(r.items)),
-          settled("arxiv", fetchArxiv(6)).then((r) => push(r.items)),
-          settled(
-            "reddit",
-            fetchReddit({
-              limitPerSub: 3,
-              subs: [...FAST_REDDIT_SUBS],
-              fast: true,
-            }),
-          ).then((r) => push(r.items)),
-          settled(
-            "rss",
-            fetchRssFeeds({
-              perFeed: 2,
-              maxFeeds: 8,
-              // Prefer AI + eng blogs (priority ≥ 4)
-              minPriority: 4,
-              timeoutMs: 5_000,
-            }),
-          ).then((r) => push(r.items)),
-          settled("huggingface", fetchHuggingFace(6)).then((r) => push(r.items)),
-          settled("devto", fetchDevTo(8, { tags: ["ai", "typescript"], timeoutMs: 6_000 })).then(
-            (r) => push(r.items),
-          ),
-          settled("stackoverflow", fetchStackOverflow(6, { tags: ["typescript", "llm"], timeoutMs: 6_000 })).then(
-            (r) => push(r.items),
-          ),
-          settled("producthunt", fetchProductHunt(4)).then((r) => push(r.items)),
-          settled("tavily", fetchTavily(4, { queries: 1, timeoutMs: 8_000 })).then((r) =>
-            push(r.items),
-          ),
-          // Skip X in fast mode — often slow / rate-limited and optional
-        ]
-      : [
-          settled("hackernews", fetchHackerNews(20)).then((r) => push(r.items)),
-          settled("github", fetchGithubTrending(14)).then((r) => push(r.items)),
-          settled("arxiv", fetchArxiv(12)).then((r) => push(r.items)),
-          settled("reddit", fetchReddit({ limitPerSub: 3 })).then((r) => push(r.items)),
-          settled("rss", fetchRssFeeds({ perFeed: 3 })).then((r) => push(r.items)),
-          settled("huggingface", fetchHuggingFace(10)).then((r) => push(r.items)),
-          settled("devto", fetchDevTo(12)).then((r) => push(r.items)),
-          settled("stackoverflow", fetchStackOverflow(12)).then((r) => push(r.items)),
-          settled("producthunt", fetchProductHunt(6)).then((r) => push(r.items)),
-          settled("tavily", fetchTavily(9)).then((r) => push(r.items)),
-          settled("x", fetchXResearch(10)).then((r) => push(r.items)),
-        ];
+  const tasks: Promise<void>[] = [];
+  const fast = mode === "fast";
+
+  if (policyProviders.has("github")) {
+    tasks.push(
+      settled("github", fetchGithubTrending(fast ? 8 : 16)).then((r) => push(r.items)),
+    );
+  }
+  if (policyProviders.has("arxiv")) {
+    tasks.push(
+      settled(
+        "arxiv",
+        fetchArxiv(fast ? 8 : 16, { terms: PRODUCT_RESEARCH_TERMS }),
+      ).then((r) => push(r.items)),
+    );
+  }
+  if (policyProviders.has("huggingface")) {
+    tasks.push(
+      settled("huggingface", fetchHuggingFace(fast ? 8 : 14)).then((r) =>
+        push(r.items),
+      ),
+    );
+  }
+  if (policyProviders.has("rss")) {
+    tasks.push(
+      settled(
+        "rss",
+        fetchRssFeeds({
+          perFeed: fast ? 1 : 2,
+          maxFeeds: 10,
+          minPriority: 5,
+          categories: ["ai_company", "engineering"],
+          timeoutMs: fast ? 5_000 : 8_000,
+        }),
+      ).then((r) => push(r.items)),
+    );
+  }
+  if (policyProviders.has("hackernews")) {
+    tasks.push(
+      settled("hackernews", fetchHackerNews(fast ? 8 : 15)).then((r) =>
+        push(r.items),
+      ),
+    );
+  }
+  if (policyProviders.has("reddit")) {
+    tasks.push(
+      settled(
+        "reddit",
+        fetchReddit({
+          limitPerSub: fast ? 2 : 3,
+          subs: [...FAST_REDDIT_SUBS],
+          fast: true,
+          timeoutMs: fast ? 5_000 : 8_000,
+        }),
+      ).then((r) => push(r.items)),
+    );
+  }
 
   await Promise.race([
     Promise.allSettled(tasks),
@@ -144,7 +164,11 @@ export async function collectAllSources(options: CollectOptions = {}): Promise<R
   // Give in-flight collectors a brief grace to flush if budget fired mid-flight
   await new Promise((r) => setTimeout(r, 50));
 
-  return dedupeAndScore(bag);
+  return filterSourcesForContentType(
+    dedupeAndScore(bag),
+    contentType,
+    strategy,
+  );
 }
 
 /** Human-readable source mix for pipeline logs */

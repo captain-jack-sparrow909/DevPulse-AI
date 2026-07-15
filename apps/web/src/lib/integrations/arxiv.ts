@@ -5,11 +5,18 @@ import { researchFetch } from "./fetch";
  * arXiv API — free Atom feed search for recent AI/ML papers.
  */
 /** Categories from information-sources.md: cs.AI, cs.LG, cs.CL, cs.CV, cs.RO */
-export async function fetchArxiv(limit = 14): Promise<RawSourceItem[]> {
+export async function fetchArxiv(
+  limit = 14,
+  options: { terms?: readonly string[] } = {},
+): Promise<RawSourceItem[]> {
   try {
-    const query = encodeURIComponent(
-      "cat:cs.AI OR cat:cs.LG OR cat:cs.CL OR cat:cs.CV OR cat:cs.RO",
-    );
+    const categories = "(cat:cs.AI OR cat:cs.LG OR cat:cs.CL OR cat:cs.CV OR cat:cs.RO)";
+    const focus = options.terms
+      ?.slice(0, 8)
+      .map((term) => `all:\"${term.replace(/[\"\\]/g, " ").trim()}\"`)
+      .filter((term) => term !== 'all:\"\"')
+      .join(" OR ");
+    const query = encodeURIComponent(focus ? `${categories} AND (${focus})` : categories);
     const url = `https://export.arxiv.org/api/query?search_query=${query}&sortBy=submittedDate&sortOrder=descending&max_results=${limit}`;
     const res = await researchFetch(url, {
       headers: { "User-Agent": "DevPulse-AI/1.0" },

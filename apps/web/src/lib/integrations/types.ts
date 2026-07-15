@@ -1,11 +1,14 @@
 export type ResearchProvider =
+  // Active product-first generation providers
   | "hackernews"
   | "github"
   | "arxiv"
   | "reddit"
   | "rss"
-  | "x"
   | "huggingface"
+  | "project"
+  // Historical provider values remain readable for existing Source rows.
+  | "x"
   | "stackoverflow"
   | "devto"
   | "producthunt"

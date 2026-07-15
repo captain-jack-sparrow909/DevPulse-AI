@@ -87,6 +87,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ ...result, action: "regenerate" });
     }
 
+    // Manual override can intentionally prepare the next unfilled slot before
+    // its normal prep window. The resumable cron path remains time-driven.
+    if (allowEarly) {
+      const result = await runDueSlotGeneration({
+        userId: session.user.id,
+        platforms,
+        allowEarly: true,
+        researchMode: "fast",
+        skipScreenshot: true,
+      });
+      return NextResponse.json({ ...result, action: "generate" });
+    }
+
     // Multi-phase under a time budget (same as cron; no self-fetch)
     const r = await runPhasesWithBudget(session.user.id, 55_000);
     return NextResponse.json({

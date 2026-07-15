@@ -4,42 +4,37 @@ import type { RawSourceItem, ResearchProvider } from "@/lib/integrations/types";
 export const MAX_POSTS_PER_PROVIDER_PER_DAY = 2;
 
 /**
- * Preferred providers per daily slot (0–11). Rotates content type so a day
- * is not 12× the same feed (e.g. all GitHub repos).
+ * Legacy slot-provider helper retained for callers outside the strategy engine.
+ * It now mirrors the product-first 5/2/1/1/1 editorial cycle.
  *
- * Lane mix over 12 slots:
- *  community · research · eng blog · repo · howto · product
- *  news · research · discussion · repo · blog · howto
+ * Removed providers never appear here. Project sources dominate; external
+ * providers are confined to their supporting lanes.
  */
 export const SLOT_PROVIDER_ROTATION: ResearchProvider[][] = [
-  ["hackernews", "reddit"], // 0 community
-  ["arxiv", "huggingface"], // 1 research
-  ["rss", "devto"], // 2 eng / AI blog
-  ["github"], // 3 repo spotlight (at most ~2/day)
-  ["stackoverflow", "devto"], // 4 howto / Q&A
-  ["producthunt", "tavily"], // 5 product / discovery
-  ["hackernews", "rss"], // 6 news + blog
-  ["huggingface", "arxiv"], // 7 research again
-  ["reddit", "x"], // 8 discussion
-  ["github", "producthunt"], // 9 second repo window (quota still applies)
-  ["rss", "tavily"], // 10 blog / search
-  ["devto", "stackoverflow"], // 11 howto close
+  ["project"],
+  ["github", "rss"],
+  ["project"],
+  ["arxiv", "huggingface"],
+  ["project"],
+  ["hackernews", "reddit"],
+  ["project"],
+  ["github", "rss"],
+  ["project"],
+  ["github", "rss", "arxiv", "huggingface"],
 ];
 
 /** Human labels for logs / UI */
 export const SLOT_LANE_LABELS = [
-  "community",
-  "research",
-  "blog",
-  "repo",
-  "howto",
-  "product",
-  "news",
-  "research",
-  "discussion",
-  "repo",
-  "blog",
-  "howto",
+  "project",
+  "architecture",
+  "project",
+  "benchmark",
+  "project",
+  "opinion",
+  "project",
+  "architecture",
+  "project",
+  "curated",
 ] as const;
 
 /**

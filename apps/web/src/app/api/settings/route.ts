@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { slugify } from "@/lib/utils";
+import { getContentStrategy, saveContentStrategy } from "@/lib/content/strategy-store";
+import type { ContentStrategyConfig } from "@/lib/content/strategy";
 
 async function getUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -13,7 +15,7 @@ export async function GET() {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [settings, topics, styles, models] = await Promise.all([
+  const [settings, topics, styles, models, strategy] = await Promise.all([
     prisma.userSettings.upsert({
       where: { userId: user.id },
       create: { userId: user.id },
@@ -22,9 +24,10 @@ export async function GET() {
     prisma.topic.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } }),
     prisma.writingStyle.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } }),
     prisma.modelConfig.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } }),
+    getContentStrategy(user.id),
   ]);
 
-  return NextResponse.json({ settings, topics, styles, models });
+  return NextResponse.json({ settings, topics, styles, models, strategy });
 }
 
 export async function PATCH(request: Request) {
@@ -55,6 +58,7 @@ export async function PATCH(request: Request) {
       temperature?: number;
       isDefault?: boolean;
     };
+    strategy?: Partial<ContentStrategyConfig>;
   };
 
   if (body.settings) {
@@ -63,6 +67,10 @@ export async function PATCH(request: Request) {
       create: { userId: user.id, ...body.settings },
       update: body.settings,
     });
+  }
+
+  if (body.strategy) {
+    await saveContentStrategy(user.id, body.strategy);
   }
 
   if (body.topic) {

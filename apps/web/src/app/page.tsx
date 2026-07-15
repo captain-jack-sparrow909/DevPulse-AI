@@ -6,7 +6,7 @@ import { LandingPage } from "@/components/landing/landing-page";
 export const metadata: Metadata = {
   title: "DevPulse AI — Research-first content for engineers",
   description:
-    "Turn live HN, GitHub, arXiv, and Reddit signal into senior-engineer posts for X and LinkedIn. One due slot at a time. You approve. You post.",
+    "Turn owned-product lessons and narrowly relevant engineering research into posts for X and LinkedIn. One due slot at a time. You approve. You post.",
   openGraph: {
     title: "DevPulse AI — Research-first content for engineers",
     description:

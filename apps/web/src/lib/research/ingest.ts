@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import { collectAllSources, describeSourceMix, type RawSourceItem } from "@/lib/integrations";
+import { getContentStrategy } from "@/lib/content/strategy-store";
+import { projectSources } from "@/lib/content/strategy";
 
 /**
  * Diversify the list so one provider cannot flood storage/ranking.
@@ -48,7 +50,7 @@ export interface IngestResult {
 }
 
 /**
- * Fetch from all collectors and persist to Source table (no post writing).
+ * Refresh the complete active product-first catalog (no post writing).
  */
 export async function ingestResearchFeed(userId: string): Promise<IngestResult> {
   const logs: string[] = [];
@@ -59,8 +61,19 @@ export async function ingestResearchFeed(userId: string): Promise<IngestResult> 
   });
 
   try {
-    log("Collecting from full source catalog…");
-    const raw = await collectAllSources();
+    log("Collecting owned projects and targeted active providers…");
+    const strategy = await getContentStrategy(userId);
+    const [curated, community] = await Promise.all([
+      collectAllSources({
+        contentType: "curated_discovery",
+        strategy,
+      }),
+      collectAllSources({
+        contentType: "evidence_opinion",
+        strategy,
+      }),
+    ]);
+    const raw = [...projectSources(strategy), ...curated, ...community];
     log(`Raw fetch: ${raw.length} · ${describeSourceMix(raw)}`);
 
     const diversified = diversifySources(raw, 150, 16);

@@ -8,6 +8,8 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 |---|---|
 | Design | [`docs/DESIGN.md`](./docs/DESIGN.md) |
 | Product scope | [`project-scope.md`](./project-scope.md) |
+| Content strategy | [`docs/CONTENT-STRATEGY.md`](./docs/CONTENT-STRATEGY.md) |
+| Engagement engine | [`docs/ENGAGEMENT-ENGINE.md`](./docs/ENGAGEMENT-ENGINE.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -16,8 +18,8 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 
 Most AI tools invent posts from a blank prompt. DevPulse:
 
-1. **Ingests** live sources (Hacker News, GitHub, arXiv, Reddit; optional X **read-only** research)
-2. **Ranks** them against your topics
+1. Starts from **owned-project facts** for DevPulse AI, Röntgen AI, and IntelliTab
+2. Adds only product-relevant GitHub/RSS, arXiv/Hugging Face, or limited HN/Reddit evidence for the matching editorial lane
 3. **Writes one post per due slot** (not 12 at once) so afternoon news can appear the same day
 4. **Scores** quality and rewrites weak drafts
 5. Optionally **screenshots** the source page with Playwright when an image helps engagement
@@ -30,7 +32,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 | Rule | Detail |
 |------|--------|
 | Manual posting only | No tweet create / LinkedIn share from this app |
-| X API (if any) | **Research / read only** (`X_BEARER_TOKEN`) |
+| Research policy | Product-first, lane-specific, and relevance-filtered |
 | Slot generation | Exactly **one** post when a slot is due; fresh research each run |
 | Timezone default | **Asia/Dubai** (UAE, UTC+4) — editable in Settings |
 | Daily cadence | **12 slots**, first **06:00**, last **21:00** (evenly spaced) |
@@ -47,7 +49,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 | DB | SQLite locally · Postgres / Supabase later |
 | ORM | Prisma 5 |
 | AI | DeepSeek (OpenAI-compatible); demo mode without a key |
-| Research | HN, GitHub, arXiv, Reddit (free); optional X bearer for search |
+| Research | Owned projects + selective GitHub/RSS, arXiv/Hugging Face, and limited HN/Reddit |
 | Screenshots | Playwright (Chromium) → `public/screenshots/` |
 | Cron | `GET /api/cron/slot` every ~15 min (`vercel.json`) |
 
@@ -129,7 +131,7 @@ Use a free external cron (cron-job.org or GitHub Actions) every **15 minutes** �
 `GET /api/cron/slot` + header `Authorization: Bearer $CRON_SECRET`.  
 Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 
-**Supabase free tier:** use `DATABASE_URL` + `DIRECT_URL`. Optional UI flag **Allow early** can draft the next unfilled slot before its clock time.
+**Supabase free tier:** use the Supavisor transaction pooler for `DATABASE_URL` (`:6543`) and session pooler for `DIRECT_URL` (`:5432`). The direct `db.…:5432` host requires IPv6 or Supabase's IPv4 add-on. Optional UI flag **Allow early** can draft the next unfilled slot before its clock time.
 
 ---
 
@@ -183,7 +185,6 @@ npx playwright install chromium
 - **Vercel** — hosting + cron  
 - **Supabase** — free Postgres; wipe near ~450MB when trends are stale  
 - **DeepSeek** — cheap generation  
-- **Tavily** — optional later for search  
 - **Cloudflare R2** — optional object storage (screenshots currently local)  
 - No Redis required for 12 posts/day  
 
@@ -207,7 +208,8 @@ DevPulse AI/
         ├── components/
         └── lib/
             ├── ai/              # pipeline, scoring, DeepSeek
-            ├── integrations/    # HN, GitHub, arXiv, Reddit, X research
+            ├── integrations/    # active collectors + historical adapters
+            ├── research/        # product-first source policy and persistence
             ├── schedule/        # slots, promote-ready
             ├── screenshots/     # Playwright capture
             └── publish/         # manual-only policy helpers

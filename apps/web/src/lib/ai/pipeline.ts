@@ -5,15 +5,19 @@ import { diversifySources } from "@/lib/research/ingest";
 import {
   describeProviderCounts,
   MAX_POSTS_PER_PROVIDER_PER_DAY,
-  orderCandidatesForSlot,
-  SLOT_LANE_LABELS,
-  SLOT_PROVIDER_ROTATION,
 } from "@/lib/research/diversity";
+import { describeSourcePolicy } from "@/lib/research/source-policy";
 import { DEFAULT_WRITING_STYLE } from "@/lib/constants";
 import { contentHash } from "@/lib/hash";
 import { chatCompletion, isAiConfigured } from "./client";
 import { ANGLES, PROMPTS } from "./prompts";
-import { heuristicScore, parseScores, type QualityScores } from "./scoring";
+import {
+  blendQualityScores,
+  heuristicScore,
+  parseScores,
+  scoreDualDraft,
+  type QualityScores,
+} from "./scoring";
 import {
   buildSlotPlan,
   dayBoundsUtc,
@@ -32,6 +36,24 @@ import {
   splitIntoXChunks,
   X_CHAR_LIMIT,
 } from "@/lib/content/platforms";
+import { getContentStrategy } from "@/lib/content/strategy-store";
+import {
+  buildStrategyPrompt,
+  contentTypeForSlot,
+  orderCandidatesForStrategy,
+  projectSources,
+  strategyFromRecord,
+} from "@/lib/content/strategy";
+import {
+  buildEngagementPrompt,
+  engagementBriefForSlot,
+  maxTextSimilarity,
+  parseDraftCandidates,
+  selectBestDraft,
+  type DualDraft,
+  type EngagementBrief,
+} from "@/lib/content/engagement";
+import { sourceItemKey, upsertResearchSources } from "@/lib/research/source-store";
 
 export interface PipelineOptions {
   userId: string;
@@ -92,13 +114,6 @@ function pickAngle(index: number): string {
   return ANGLES[index % ANGLES.length];
 }
 
-type DualDraft = {
-  title: string;
-  hook: string;
-  linkedIn: string;
-  xThread: string[];
-};
-
 function demoDualContent(source: RawSourceItem, angle: string): DualDraft {
   const hook = source.title.slice(0, 80);
   const summary = source.summary?.slice(0, 400) || "Fresh signal from the engineering feed.";
@@ -130,8 +145,9 @@ async function generateDualWithAi(params: {
   angle: string;
   stylePrompt: string;
   rules: string;
-}): Promise<DualDraft> {
-  const user = `Write ONE idea as two platform formats from the same source.
+  engagementBrief: EngagementBrief;
+}): Promise<DualDraft[]> {
+  const user = `Turn ONE source into platform-native social content.
 
 Angle: ${params.angle}
 Source title: ${params.source.title}
@@ -140,85 +156,26 @@ Source summary: ${params.source.summary || "n/a"}
 Provider: ${params.source.provider}
 
 Match the source type:
-- github → repo / tool / library angle (not every post should sound like this)
-- arxiv / huggingface → paper or model insight
-- hackernews / reddit → discussion takeaway or evidence-backed take
-- rss / devto → blog / engineering lesson
-- stackoverflow → practical howto
-- producthunt / tavily → product or discovery angle
-- x → short social signal expanded carefully
+- project → owned-project architecture or implementation lesson; use only supplied facts
+- github / official RSS → product-relevant architecture or curated discovery
+- arxiv / huggingface → selective product-related experiment or research insight
+- hackernews / reddit → evidence-backed opinion slots only
 
 Rules:
 ${params.rules}
 
-LinkedIn:
-- Long-form, 500–2000 characters
-- Short paragraphs, senior-engineer voice
-- Educational, no clickbait
-- Do not force a "GitHub repo spotlight" framing unless provider is github
-
-X (Twitter):
-- Array of tweets. EACH tweet must be ≤ ${X_CHAR_LIMIT} characters (hard limit).
-- If the idea needs more space, write a thread (2–8 tweets), each self-contained enough to scan.
-- Do NOT put more than ${X_CHAR_LIMIT} characters in any xThread item.
-- Include the source URL in the last tweet when possible.
-
-Return JSON only:
-{
-  "title": "short internal title",
-  "hook": "first line shared vibe",
-  "linkedin": "full LinkedIn post text",
-  "xThread": ["tweet 1 ≤280 chars", "tweet 2 ≤280 chars"]
-}`;
+${buildEngagementPrompt(params.engagementBrief)}`;
 
   const raw = await chatCompletion({
-    system: params.stylePrompt + "\n\nAlways produce both LinkedIn long-form and an X thread with hard 280-char limits per tweet.",
+    system:
+      params.stylePrompt +
+      "\n\nProduce factual, ready-to-paste LinkedIn and X copy. Follow the JSON schema exactly.",
     user,
-    temperature: 0.75,
+    temperature: 0.82,
+    maxTokens: 3200,
     json: true,
   });
-
-  try {
-    const parsed = JSON.parse(raw) as {
-      title?: string;
-      hook?: string;
-      linkedin?: string;
-      linkedIn?: string;
-      content?: string;
-      xThread?: string[];
-      threadParts?: string[];
-    };
-    const linkedIn = (
-      parsed.linkedin ||
-      parsed.linkedIn ||
-      parsed.content ||
-      raw
-    ).trim();
-    let xThread = enforceXLimit(
-      parsed.xThread?.length
-        ? parsed.xThread.map(String)
-        : parsed.threadParts?.length
-          ? parsed.threadParts.map(String)
-          : splitIntoXChunks(linkedIn),
-    );
-    if (xThread.length === 0) {
-      xThread = splitIntoXChunks(linkedIn);
-    }
-    return {
-      title: parsed.title || params.source.title.slice(0, 100),
-      hook: parsed.hook || linkedIn.split("\n")[0] || "",
-      linkedIn,
-      xThread,
-    };
-  } catch {
-    const linkedIn = raw.slice(0, 2000);
-    return {
-      title: params.source.title.slice(0, 100),
-      hook: raw.split("\n")[0] || "",
-      linkedIn,
-      xThread: splitIntoXChunks(linkedIn),
-    };
-  }
+  return parseDraftCandidates(raw, params.source.title);
 }
 
 async function scoreContent(
@@ -243,56 +200,77 @@ async function scoreContent(
 }
 
 export async function ensureUserDefaults(userId: string) {
-  const settings = await prisma.userSettings.upsert({
-    where: { userId },
-    create: { userId },
-    update: {},
-  });
+  const [existingSettings, existingStrategy] = await Promise.all([
+    prisma.userSettings.findUnique({ where: { userId } }),
+    prisma.contentStrategy.findUnique({ where: { userId } }),
+  ]);
+  if (existingSettings && existingStrategy) {
+    return {
+      ...existingSettings,
+      contentStrategy: strategyFromRecord(existingStrategy),
+    };
+  }
 
-  const topicCount = await prisma.topic.count({ where: { userId } });
+  const [settings, topicCount, style, model, contentStrategy] = await Promise.all([
+    prisma.userSettings.upsert({
+      where: { userId },
+      create: { userId },
+      update: {},
+    }),
+    prisma.topic.count({ where: { userId } }),
+    prisma.writingStyle.findFirst({ where: { userId, isDefault: true } }),
+    prisma.modelConfig.findFirst({ where: { userId, isDefault: true } }),
+    getContentStrategy(userId),
+  ]);
+
+  const creates: Array<Promise<unknown>> = [];
   if (topicCount === 0) {
     const { DEFAULT_TOPICS } = await import("@/lib/constants");
-    for (const t of DEFAULT_TOPICS) {
-      await prisma.topic.create({
+    creates.push(
+      prisma.topic.createMany({
+        data: DEFAULT_TOPICS.map((topic) => ({
+          userId,
+          name: topic.name,
+          slug: topic.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+          keywords: topic.keywords,
+        })),
+      }),
+    );
+  }
+
+  if (!style) {
+    creates.push(
+      prisma.writingStyle.create({
         data: {
           userId,
-          name: t.name,
-          slug: t.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-          keywords: t.keywords,
+          name: DEFAULT_WRITING_STYLE.name,
+          isDefault: true,
+          systemPrompt: DEFAULT_WRITING_STYLE.systemPrompt,
+          rules: DEFAULT_WRITING_STYLE.rules,
+          examples: DEFAULT_WRITING_STYLE.examples,
         },
-      });
-    }
+      }),
+    );
   }
 
-  const style = await prisma.writingStyle.findFirst({ where: { userId, isDefault: true } });
-  if (!style) {
-    await prisma.writingStyle.create({
-      data: {
-        userId,
-        name: DEFAULT_WRITING_STYLE.name,
-        isDefault: true,
-        systemPrompt: DEFAULT_WRITING_STYLE.systemPrompt,
-        rules: DEFAULT_WRITING_STYLE.rules,
-        examples: DEFAULT_WRITING_STYLE.examples,
-      },
-    });
-  }
-
-  const model = await prisma.modelConfig.findFirst({ where: { userId, isDefault: true } });
   if (!model) {
-    await prisma.modelConfig.create({
-      data: {
-        userId,
-        name: "DeepSeek Chat",
-        provider: "deepseek",
-        model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
-        baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
-        isDefault: true,
-      },
-    });
+    creates.push(
+      prisma.modelConfig.create({
+        data: {
+          userId,
+          name: "DeepSeek Chat",
+          provider: "deepseek",
+          model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+          baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+          isDefault: true,
+        },
+      }),
+    );
   }
 
-  return settings;
+  await Promise.all(creates);
+
+  return { ...settings, contentStrategy };
 }
 
 /**
@@ -309,8 +287,26 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
   const platforms = options.platforms ?? ["x", "linkedin"];
   const useAi = isAiConfigured();
   const now = new Date();
+  const pipelineStartedAt = Date.now();
+  log(logs, "Pipeline started", options.onLog);
 
-  const settings = await ensureUserDefaults(options.userId);
+  const [settings] = await Promise.all([
+    ensureUserDefaults(options.userId),
+    // Clear stuck jobs left when a serverless invocation was killed mid-run.
+    prisma.generationJob.updateMany({
+      where: {
+        userId: options.userId,
+        status: { in: ["researching", "writing", "planning", "scoring"] },
+        createdAt: { lt: new Date(Date.now() - 8 * 60 * 1000) },
+      },
+      data: {
+        status: "failed",
+        error: "Interrupted or timed out — cron will retry this slot",
+        completedAt: new Date(),
+      },
+    }),
+  ]);
+  const strategy = settings.contentStrategy;
   const plan = buildSlotPlan(
     now,
     settings.timezone,
@@ -318,20 +314,6 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     settings.lastPostHour,
     settings.postsPerDay,
   );
-
-  // Clear stuck jobs left when a serverless invocation was killed mid-run
-  await prisma.generationJob.updateMany({
-    where: {
-      userId: options.userId,
-      status: { in: ["researching", "writing", "planning", "scoring"] },
-      createdAt: { lt: new Date(Date.now() - 8 * 60 * 1000) },
-    },
-    data: {
-      status: "failed",
-      error: "Interrupted or timed out — cron will retry this slot",
-      completedAt: new Date(),
-    },
-  });
 
   // Avoid overlapping cron workers for the same user (double posts / pool thrash)
   if (!options.regenerate && options.slotIndex === undefined) {
@@ -374,7 +356,11 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         skipReason: "Pick a slot to regenerate",
       };
     }
-    const cleared = await clearSlotForRegenerate(options.userId, options.slotIndex);
+    const cleared = await clearSlotForRegenerate(
+      options.userId,
+      options.slotIndex,
+      settings.timezone,
+    );
     log(
       logs,
       `Regenerate: cleared ${cleared.deleted} post(s) for slot ${options.slotIndex + 1}`,
@@ -382,7 +368,10 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     );
   }
 
-  const filled = await getOccupiedSlotIndexes(options.userId, settings.timezone, now);
+  const filled =
+    options.regenerate && options.slotIndex !== undefined
+      ? new Set<number>()
+      : await getOccupiedSlotIndexes(options.userId, settings.timezone, now);
 
   let slotIndex: number;
   let scheduledFor: Date;
@@ -560,32 +549,29 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
   );
   log(logs, "Fresh research for this slot only (not batching all 12)", options.onLog);
 
-  const topics = await prisma.topic.findMany({ where: { userId: options.userId, active: true } });
-  const style =
-    (await prisma.writingStyle.findFirst({
+  const [topics, style] = await Promise.all([
+    prisma.topic.findMany({ where: { userId: options.userId, active: true } }),
+    prisma.writingStyle.findFirst({
       where: { userId: options.userId, isDefault: true },
-    })) || null;
+    }),
+  ]);
 
   const job = await prisma.generationJob.create({
     data: {
-      userId: options.userId,
+      user: { connect: { id: options.userId } },
       status: "researching",
       targetCount: 1,
       logsJson: "[]",
+      researchRun: {
+        create: {
+          user: { connect: { id: options.userId } },
+          status: "running",
+        },
+      },
     },
+    include: { researchRun: true },
   });
-
-  const researchRun = await prisma.researchRun.create({
-    data: {
-      userId: options.userId,
-      status: "running",
-    },
-  });
-
-  await prisma.generationJob.update({
-    where: { id: job.id },
-    data: { researchRunId: researchRun.id },
-  });
+  const researchRun = job.researchRun!;
 
   try {
     log(
@@ -597,13 +583,21 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     const researchMode = options.researchMode ?? "fast";
     const skipScreenshot =
       options.skipScreenshot ?? researchMode === "fast";
+    const contentType = contentTypeForSlot(slotIndex, strategy.contentMix);
     log(
       logs,
-      `Collecting sources (${researchMode} mode, budget ~${researchMode === "fast" ? "20" : "50"}s)…`,
+      `Collecting sources (${researchMode} mode) · ${describeSourcePolicy(contentType.type)}`,
       options.onLog,
     );
 
-    const rawSources = await collectAllSources({ mode: researchMode });
+    const rawSources = [
+      ...projectSources(strategy),
+      ...(await collectAllSources({
+        mode: researchMode,
+        contentType: contentType.type,
+        strategy,
+      })),
+    ];
     log(
       logs,
       `Fetched ${rawSources.length} raw sources · ${describeSourceMix(rawSources)}`,
@@ -616,8 +610,13 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     }
 
     // Persist a diversified feed (not only topic-matched HN/arXiv)
-    const toStore = diversifySources(rawSources, 120, 12);
-    log(logs, `Storing diversified set: ${toStore.length} · ${describeSourceMix(toStore)}`, options.onLog);
+    const fastMode = researchMode === "fast";
+    const toStore = diversifySources(rawSources, fastMode ? 32 : 120, fastMode ? 3 : 12);
+    log(
+      logs,
+      `Prepared diversified set: ${toStore.length} · ${describeSourceMix(toStore)}`,
+      options.onLog,
+    );
 
     const keywords = topics.flatMap((t) => t.keywords.split(",").map((k) => k.trim())).filter(Boolean);
     // Rank full catalog for writing, but prefer diversity + unused
@@ -626,19 +625,27 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     // Prefer sources not already used in today's posts; also track providers
     // so we don't ship 12 GitHub-repo posts in a row.
     const { start, end } = dayBoundsUtc(now, settings.timezone);
-    const todayLinks = await prisma.postSource.findMany({
-      where: {
-        post: {
-          userId: options.userId,
-          createdAt: { gte: start, lte: end },
-          status: { not: "skipped" },
+    const [todayLinks, recentPosts] = await Promise.all([
+      prisma.postSource.findMany({
+        where: {
+          post: {
+            userId: options.userId,
+            createdAt: { gte: start, lte: end },
+            status: { not: "skipped" },
+          },
         },
-      },
-      select: {
-        sourceId: true,
-        source: { select: { provider: true } },
-      },
-    });
+        select: {
+          sourceId: true,
+          source: { select: { provider: true } },
+        },
+      }),
+      prisma.post.findMany({
+        where: { userId: options.userId },
+        select: { contentHash: true, hook: true, content: true },
+        take: 100,
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
     const usedSourceIds = new Set(todayLinks.map((r) => r.sourceId));
     const usedProviderCounts = new Map<string, number>();
     for (const link of todayLinks) {
@@ -651,66 +658,31 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       options.onLog,
     );
 
-    const savedByKey = new Map<string, { id: string; item: RawSourceItem }>();
-    for (const item of toStore) {
-      const externalId = item.externalId.slice(0, 190);
-      const saved = await prisma.source.upsert({
-        where: {
-          provider_externalId: { provider: item.provider, externalId },
-        },
-        create: {
-          provider: item.provider,
-          externalId,
-          title: item.title.slice(0, 500),
-          url: item.url,
-          summary: item.summary?.slice(0, 2000),
-          score: item.score ?? 0,
-          rawJson: item.raw ? JSON.stringify(item.raw).slice(0, 50_000) : null,
-          researchRunId: researchRun.id,
-        },
-        update: {
-          title: item.title.slice(0, 500),
-          url: item.url,
-          summary: item.summary?.slice(0, 2000),
-          score: item.score ?? 0,
-          researchRunId: researchRun.id,
-          fetchedAt: new Date(),
-        },
-      });
-      savedByKey.set(`${item.provider}:${externalId}`, { id: saved.id, item });
+    // Persist a compact union of the diverse feed and strongest writing candidates.
+    // Fast generation needs a good choice set, not every raw item in the database.
+    const persistCap = fastMode ? 24 : 120;
+    const persistMap = new Map<string, RawSourceItem>();
+    const rankedHead = ranked.slice(0, fastMode ? 12 : 40);
+    for (const item of [...rankedHead, ...toStore, ...ranked]) {
+      if (persistMap.size >= persistCap) break;
+      persistMap.set(sourceItemKey(item), item);
     }
-
-    // Also ensure top ranked candidates for writing are in DB
-    for (const item of ranked.slice(0, 40)) {
-      const externalId = item.externalId.slice(0, 190);
-      const key = `${item.provider}:${externalId}`;
-      if (savedByKey.has(key)) continue;
-      const saved = await prisma.source.upsert({
-        where: { provider_externalId: { provider: item.provider, externalId } },
-        create: {
-          provider: item.provider,
-          externalId,
-          title: item.title.slice(0, 500),
-          url: item.url,
-          summary: item.summary?.slice(0, 2000),
-          score: item.score ?? 0,
-          researchRunId: researchRun.id,
-        },
-        update: {
-          title: item.title.slice(0, 500),
-          url: item.url,
-          summary: item.summary?.slice(0, 2000),
-          score: item.score ?? 0,
-          researchRunId: researchRun.id,
-          fetchedAt: new Date(),
-        },
-      });
-      savedByKey.set(key, { id: saved.id, item });
-    }
+    const persistStartedAt = Date.now();
+    log(logs, `Persisting ${persistMap.size} candidates with 4 workers…`, options.onLog);
+    const savedByKey = await upsertResearchSources(
+      researchRun.id,
+      [...persistMap.values()],
+      4,
+    );
+    log(
+      logs,
+      `Persisted ${savedByKey.size} candidates in ${((Date.now() - persistStartedAt) / 1000).toFixed(1)}s`,
+      options.onLog,
+    );
 
     // Pool: ranked + any stored leftovers not already in ranked list
     const rankedSaved = ranked
-      .map((item) => savedByKey.get(`${item.provider}:${item.externalId.slice(0, 190)}`))
+      .map((item) => savedByKey.get(sourceItemKey(item)))
       .filter((x): x is { id: string; item: RawSourceItem } => Boolean(x));
 
     const poolMap = new Map<string, { id: string; item: RawSourceItem }>();
@@ -720,86 +692,85 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     }
 
     // Slot lane rotation + daily provider quotas (not pure score — GitHub stars used to win every time)
-    const ordered = orderCandidatesForSlot([...poolMap.values()], {
-      slotIndex,
+    const ordered = orderCandidatesForStrategy([...poolMap.values()], {
+      strategy,
+      contentType: contentType.type,
       usedSourceIds,
       usedProviderCounts,
       maxPerProvider: MAX_POSTS_PER_PROVIDER_PER_DAY,
     });
 
-    const lane =
-      SLOT_LANE_LABELS[slotIndex % SLOT_LANE_LABELS.length] ?? "mixed";
-    const preferred =
-      SLOT_PROVIDER_ROTATION[slotIndex % SLOT_PROVIDER_ROTATION.length] ?? [];
     log(
       logs,
-      `Slot ${slotIndex + 1} lane=${lane} · prefer [${preferred.join(", ")}] · top candidates: ${ordered
+      `Slot ${slotIndex + 1} strategy=${contentType.type} · audience-first top candidates: ${ordered
         .slice(0, 6)
         .map((c) => c.item.provider)
         .join(" → ")}`,
       options.onLog,
     );
 
-    await prisma.researchRun.update({
-      where: { id: researchRun.id },
-      data: {
-        status: "completed",
-        sourcesFound: savedByKey.size,
-        topicsRanked: JSON.stringify(
-          ordered.slice(0, 20).map((s) => ({
-            title: s.item.title,
-            provider: s.item.provider,
-            url: s.item.url,
-          })),
-        ),
-        completedAt: new Date(),
-      },
-    });
-
     log(
       logs,
       `Research complete: ${savedByKey.size} sources stored · ${ordered.filter((s) => !usedSourceIds.has(s.id)).length} unused candidates today`,
       options.onLog,
     );
-    await prisma.generationJob.update({
-      where: { id: job.id },
-      data: { status: "writing", logsJson: JSON.stringify(logs) },
-    });
 
     if (ordered.length === 0) {
       throw new Error("No research sources available to write about");
     }
 
-    const existingHashes = new Set(
-      (
-        await prisma.post.findMany({
-          where: { userId: options.userId },
-          select: { contentHash: true },
-          take: 500,
-          orderBy: { createdAt: "desc" },
-        })
-      ).map((p) => p.contentHash),
-    );
+    await Promise.all([
+      prisma.researchRun.update({
+        where: { id: researchRun.id },
+        data: {
+          status: "completed",
+          sourcesFound: savedByKey.size,
+          topicsRanked: JSON.stringify(
+            ordered.slice(0, 20).map((source) => ({
+              title: source.item.title,
+              provider: source.item.provider,
+              url: source.item.url,
+            })),
+          ),
+          completedAt: new Date(),
+        },
+      }),
+      prisma.generationJob.update({
+        where: { id: job.id },
+        data: { status: "writing", logsJson: JSON.stringify(logs) },
+      }),
+    ]);
+
+    const existingHashes = new Set(recentPosts.map((post) => post.contentHash));
+    const recentHooks = recentPosts
+      .map((post) => post.hook || post.content.split("\n")[0] || "")
+      .filter(Boolean)
+      .slice(0, 100);
 
     const stylePrompt = style?.systemPrompt || DEFAULT_WRITING_STYLE.systemPrompt;
     const rules = style?.rules || DEFAULT_WRITING_STYLE.rules;
     const threshold = settings.qualityThreshold;
     // Every slot pack is dual-format: LinkedIn long-form + X thread (≤280 each)
     void platforms; // reserved for future per-platform toggles
-    const angle = pickAngle(slotIndex);
+    const angle = contentType.label || pickAngle(slotIndex);
+    const strategyPrompt = buildStrategyPrompt(strategy, contentType);
+    const engagementBrief = engagementBriefForSlot(slotIndex, contentType);
 
     let produced = 0;
     let lastError = "";
 
-    // Fast mode: fewer rewrite attempts so we finish inside 60s
+    // Fast mode: fewer source attempts so we finish inside 60s.
     const maxAttempts = researchMode === "fast" ? Math.min(4, ordered.length) : Math.min(10, ordered.length);
-    const allowRewrite = researchMode === "full";
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const picked = ordered[attempt]!;
       const source = picked.item;
       const providerUses = usedProviderCounts.get(source.provider) ?? 0;
-      if (providerUses >= MAX_POSTS_PER_PROVIDER_PER_DAY && attempt < ordered.length - 2) {
+      if (
+        source.provider !== "project" &&
+        providerUses >= MAX_POSTS_PER_PROVIDER_PER_DAY &&
+        attempt < ordered.length - 2
+      ) {
         log(
           logs,
           `Skip ${source.provider} (already ${providerUses} today, max ${MAX_POSTS_PER_PROVIDER_PER_DAY}) — next candidate`,
@@ -814,54 +785,68 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         options.onLog,
       );
 
-      let draft: DualDraft = useAi
-        ? await generateDualWithAi({ source, angle, stylePrompt, rules })
-        : demoDualContent(source, angle);
+      const candidates: DualDraft[] = useAi
+        ? await generateDualWithAi({
+            source,
+            angle,
+            stylePrompt,
+            rules: `${rules}\n\n${strategyPrompt}`,
+            engagementBrief,
+          })
+        : [demoDualContent(source, angle)];
 
-      draft.xThread = enforceXLimit(draft.xThread);
-      log(
-        logs,
-        `Formats ready: LinkedIn ${draft.linkedIn.length} chars · X ${draft.xThread.length} tweet(s), max ${Math.max(0, ...draft.xThread.map((t) => t.length))}/${X_CHAR_LIMIT}`,
-        options.onLog,
-      );
-
-      // Fast mode: heuristic score only (skip second LLM call to stay under 60s)
-      let scores = await scoreContent(
-        draft.linkedIn,
-        "linkedin",
-        useAi && researchMode === "full",
-      );
-
-      if (scores.overall < threshold && useAi && allowRewrite) {
-        log(logs, `Score ${scores.overall} < ${threshold} — rewriting LinkedIn body…`, options.onLog);
-        try {
-          const edited = await chatCompletion({
-            system: PROMPTS.editor.system,
-            user: `Improve this LinkedIn post. Keep facts. Score was ${scores.overall}.\n\n${draft.linkedIn}`,
-            temperature: 0.5,
-          });
-          if (edited) {
-            draft = {
-              ...draft,
-              linkedIn: edited,
-              hook: edited.split("\n")[0] || draft.hook,
-              // Rebuild X thread from improved body if original was weak
-              xThread: draft.xThread.length
-                ? enforceXLimit(draft.xThread)
-                : splitIntoXChunks(edited),
-            };
-            scores = await scoreContent(draft.linkedIn, "linkedin", useAi);
-          }
-        } catch {
-          // keep original
-        }
+      const selected = selectBestDraft(candidates, source.url, engagementBrief, {
+        provider: source.provider,
+        title: source.title,
+        summary: source.summary,
+      });
+      if (!selected) {
+        lastError = "Writer returned no valid candidate packs";
+        log(logs, `${lastError} — trying next source…`, options.onLog);
+        continue;
       }
 
-      // In fast mode accept drafts more liberally — next cron can regenerate if weak
+      const { draft, audit } = selected;
+
+      log(
+        logs,
+        `Selected best of ${candidates.length} candidate(s): engagement ${audit.score}/10 · LinkedIn ${draft.linkedIn.length} chars · X ${draft.xThread.length} post(s), max ${Math.max(0, ...draft.xThread.map((t) => t.length))}/${X_CHAR_LIMIT}`,
+        options.onLog,
+      );
+      if (audit.warnings.length) {
+        log(logs, `Draft warnings: ${audit.warnings.join("; ")}`, options.onLog);
+      }
+
+      if (audit.hardFailures.length && useAi) {
+        lastError = audit.hardFailures.join("; ");
+        log(logs, `Rejected draft: ${lastError} — trying next source…`, options.onLog);
+        continue;
+      }
+
+      let scores = scoreDualDraft(draft, audit);
+      if (useAi && researchMode === "full") {
+        const modelScore = await scoreContent(draft.linkedIn, "linkedin", true);
+        scores = blendQualityScores(scores, modelScore);
+      }
+
+      const engagementFloor = researchMode === "fast" ? 5.8 : 6.5;
+      if (audit.score < engagementFloor && useAi) {
+        lastError = `Low engagement score ${audit.score}`;
+        log(logs, `Rejected draft (${audit.score}), trying next source…`, options.onLog);
+        continue;
+      }
+
       const rejectFloor = researchMode === "fast" ? threshold - 3 : threshold - 1.5;
       if (scores.overall < rejectFloor && useAi) {
         lastError = `Low quality score ${scores.overall}`;
         log(logs, `Rejected draft (${scores.overall}), trying next source…`, options.onLog);
+        continue;
+      }
+
+      const hookSimilarity = maxTextSimilarity(draft.hook, recentHooks);
+      if (hookSimilarity > 0.72 && useAi) {
+        lastError = `Repetitive hook (${Math.round(hookSimilarity * 100)}% similar)`;
+        log(logs, `${lastError} — trying next source…`, options.onLog);
         continue;
       }
 
@@ -920,8 +905,9 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         log(logs, `No screenshot: ${imageDecision.reason}`, options.onLog);
       }
 
-      await prisma.post.create({
-        data: {
+      await prisma.$transaction([
+        prisma.post.create({
+          data: {
           userId: options.userId,
           platform: "both",
           format: draft.xThread.length > 1 ? "dual-thread" : "dual",
@@ -968,8 +954,18 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           sources: {
             create: [{ sourceId: picked.id }],
           },
-        },
-      });
+          },
+        }),
+        prisma.generationJob.update({
+          where: { id: job.id },
+          data: {
+            status: "completed",
+            producedCount: 1,
+            logsJson: JSON.stringify(logs),
+            completedAt: new Date(),
+          },
+        }),
+      ]);
 
       produced = 1;
       break;
@@ -979,19 +975,9 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       throw new Error(lastError || "Could not produce a quality post for this slot");
     }
 
-    await prisma.generationJob.update({
-      where: { id: job.id },
-      data: {
-        status: "completed",
-        producedCount: 1,
-        logsJson: JSON.stringify(logs),
-        completedAt: new Date(),
-      },
-    });
-
     log(
       logs,
-      `Done: 1 post for slot ${slotIndex + 1}/${plan.postsPerDay}. Review → approve → post manually. Next slot will re-research live trends.`,
+      `Done in ${((Date.now() - pipelineStartedAt) / 1000).toFixed(1)}s: 1 post for slot ${slotIndex + 1}/${plan.postsPerDay}. Review → approve → post manually. Next slot will re-research live trends.`,
       options.onLog,
     );
 

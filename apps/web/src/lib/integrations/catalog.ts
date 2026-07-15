@@ -81,10 +81,6 @@ export const PROVIDER_PRIORITY: Record<string, number> = {
   huggingface: 5,
   rss: 5,
   reddit: 4,
-  github: 4, // repos are one lane, not the default day
-  devto: 4,
-  stackoverflow: 4,
-  tavily: 4,
-  producthunt: 3,
-  x: 3, // paid / use lightly
+  github: 4,
+  project: 6,
 };

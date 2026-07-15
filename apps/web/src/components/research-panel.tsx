@@ -57,7 +57,7 @@ export function ResearchPanel({
     setLoading(true);
     setError("");
     setMessage("");
-    setLogs(["Refreshing research feed from all collectors…"]);
+    setLogs(["Refreshing the product-relevant research feed…"]);
     try {
       const res = await fetch("/api/research/refresh", { method: "POST" });
       const data = await res.json();
@@ -87,8 +87,8 @@ export function ResearchPanel({
           <div className="page-kicker mb-2">Signals</div>
           <h1 className="page-title">Research feed</h1>
           <p className="page-subtitle">
-            Live catalog: AI blogs, eng blogs, HN, GitHub, arXiv, HF, Reddit, Dev.to, SO, Tavily, PH,
-            X. Refresh to re-ingest without generating a post.
+            Product-relevant catalog: priority-5 official AI/engineering blogs, GitHub, arXiv,
+            Hugging Face, and limited HN/Reddit. Refresh without generating a post.
           </p>
         </div>
         <Button
@@ -96,7 +96,7 @@ export function ResearchPanel({
           disabled={loading || pending}
           className="w-full shrink-0 sm:w-auto"
         >
-          {loading ? "Fetching all sources…" : "Refresh research now"}
+          {loading ? "Fetching targeted sources…" : "Refresh research now"}
         </Button>
       </div>
 

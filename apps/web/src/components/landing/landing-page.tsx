@@ -15,8 +15,8 @@ import { LandingHeader } from "@/components/landing/landing-header";
 const PIPELINE = [
   {
     step: "01",
-    title: "Ingest live signals",
-    body: "Hacker News, GitHub, arXiv, Reddit—and optional X research. Real URLs, not invented topics.",
+    title: "Start from your products",
+    body: "Owned-project facts first, with narrowly relevant external evidence only when the post type needs it.",
   },
   {
     step: "02",
@@ -115,8 +115,8 @@ export function LandingPage() {
                 —not a blank prompt.
               </h1>
               <p className="mt-5 max-w-lg text-[15px] leading-relaxed text-zinc-400 sm:mt-6 sm:text-base sm:text-lg">
-                DevPulse is a research-first studio that turns Hacker News, GitHub, arXiv, and Reddit
-                into senior-engineer posts for X and LinkedIn. One slot at a time. You approve.
+                DevPulse turns real lessons from the products you are building into senior-engineer
+                posts for X and LinkedIn, supported by selective research. One slot at a time. You approve.
                 You post. The feed stays honest.
               </p>
               <div className="mt-7 flex w-full flex-col gap-3 sm:mt-8 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -177,7 +177,7 @@ export function LandingPage() {
                         Live research
                       </div>
                       <div className="mt-1 text-sm font-medium text-zinc-100">
-                        GitHub · arXiv · HN · Reddit
+                        Projects first · targeted evidence
                       </div>
                     </div>
                     <div className="rounded-md bg-zinc-900 px-2 py-1 font-mono text-[10px] text-zinc-400">

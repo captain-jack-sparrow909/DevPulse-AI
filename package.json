@@ -9,7 +9,8 @@
     "start": "npm run start --prefix apps/web",
     "db:push": "npm run db:push --prefix apps/web",
     "db:studio": "npm run db:studio --prefix apps/web",
-    "lint": "npm run lint --prefix apps/web"
+    "lint": "npm run lint --prefix apps/web",
+    "test": "npm run test --prefix apps/web"
   },
   "engines": {
     "node": ">=20"

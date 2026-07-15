@@ -100,29 +100,23 @@ export async function getOccupiedSlotIndexes(
 export async function clearSlotForRegenerate(
   userId: string,
   slotIndex: number,
+  timezone?: string,
 ): Promise<{ deleted: number }> {
-  const settings = await getSettings(userId);
-  const { start, end } = dayBoundsUtc(new Date(), settings.timezone);
+  const resolvedTimezone = timezone || (await getSettings(userId)).timezone;
+  const { start, end } = dayBoundsUtc(new Date(), resolvedTimezone);
 
-  const schedules = await prisma.schedule.findMany({
+  const deleted = await prisma.post.deleteMany({
     where: {
-      slotIndex,
-      scheduledFor: { gte: start, lte: end },
-      post: { userId },
+      userId,
+      schedule: {
+        is: {
+          slotIndex,
+          scheduledFor: { gte: start, lte: end },
+        },
+      },
     },
-    select: { postId: true },
   });
-
-  if (schedules.length === 0) {
-    return { deleted: 0 };
-  }
-
-  const ids = schedules.map((s) => s.postId);
-  await prisma.post.deleteMany({
-    where: { id: { in: ids }, userId },
-  });
-
-  return { deleted: ids.length };
+  return { deleted: deleted.count };
 }
 
 /**
