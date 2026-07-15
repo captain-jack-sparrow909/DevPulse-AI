@@ -13,23 +13,25 @@ datasource db {
 // ─── Better Auth tables ───────────────────────────────────────────
 
 model User {
-  id              String           @id @default(cuid())
-  name            String
-  email           String           @unique
-  emailVerified   Boolean          @default(false)
-  image           String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  sessions        Session[]
-  accounts        Account[]
-  posts           Post[]
-  researchRuns    ResearchRun[]
-  generationJobs  GenerationJob[]
-  topics          Topic[]
-  writingStyles   WritingStyle[]
-  modelConfigs    ModelConfig[]
-  settings        UserSettings?
-  contentStrategy ContentStrategy?
+  id                      String                      @id @default(cuid())
+  name                    String
+  email                   String                      @unique
+  emailVerified           Boolean                     @default(false)
+  image                   String?
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+  sessions                Session[]
+  accounts                Account[]
+  posts                   Post[]
+  researchRuns            ResearchRun[]
+  generationJobs          GenerationJob[]
+  topics                  Topic[]
+  writingStyles           WritingStyle[]
+  modelConfigs            ModelConfig[]
+  settings                UserSettings?
+  contentStrategy         ContentStrategy?
+  performanceSnapshots    SocialPerformanceSnapshot[]
+  engagementOpportunities EngagementOpportunity[]
 }
 
 model Session {
@@ -182,53 +184,101 @@ model ResearchRun {
 }
 
 model Post {
-  id               String         @id @default(cuid())
-  userId           String
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  platform         String         @default("both") // both | x | linkedin (legacy single-platform)
-  format           String         @default("dual") // dual | single | thread | longform | tip | comparison
-  title            String?
-  content          String // primary body (LinkedIn long-form for dual posts)
-  contentLinkedIn  String? // explicit LinkedIn copy (falls back to content)
-  threadJson       String? // JSON string[] — X thread, each item ≤280 chars
-  status           String         @default("draft") // draft | pending_review | approved | scheduled | ready | posted_manually | skipped | rejected | failed
-  contentHash      String
-  topicId          String?
-  topic            Topic?         @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  writingStyleId   String?
-  writingStyle     WritingStyle?  @relation(fields: [writingStyleId], references: [id], onDelete: SetNull)
-  researchRunId    String?
-  researchRun      ResearchRun?   @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
-  angle            String?
-  hook             String?
+  id                   String                      @id @default(cuid())
+  userId               String
+  user                 User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform             String                      @default("both") // both | x | linkedin (legacy single-platform)
+  format               String                      @default("dual") // dual | single | thread | longform | tip | comparison
+  title                String?
+  content              String // primary body (LinkedIn long-form for dual posts)
+  contentLinkedIn      String? // explicit LinkedIn copy (falls back to content)
+  threadJson           String? // JSON string[] — X thread, each item ≤280 chars
+  status               String                      @default("draft") // draft | pending_review | approved | scheduled | ready | posted_manually | skipped | rejected | failed
+  contentHash          String
+  topicId              String?
+  topic                Topic?                      @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  writingStyleId       String?
+  writingStyle         WritingStyle?               @relation(fields: [writingStyleId], references: [id], onDelete: SetNull)
+  researchRunId        String?
+  researchRun          ResearchRun?                @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+  angle                String?
+  contentType          String? // project_lesson | architecture_breakdown | evidence_opinion | experiment_benchmark | curated_discovery
+  hook                 String?
   // Optional screenshot for manual attach when posting on X/LinkedIn
-  needsImage       Boolean        @default(false)
-  imagePath        String? // public-relative path e.g. /screenshots/abc.png
-  imageSourceUrl   String? // page that was captured
-  imageCaption     String?
-  imageSkipReason  String? // why no image was attached
+  needsImage           Boolean                     @default(false)
+  imagePath            String? // public-relative path e.g. /screenshots/abc.png
+  imageSourceUrl       String? // page that was captured
+  imageCaption         String?
+  imageSkipReason      String? // why no image was attached
   // Quality scores 0-10
-  scoreNovelty     Float?
-  scoreAccuracy    Float?
-  scoreHook        Float?
-  scoreReadability Float?
-  scoreVirality    Float?
-  scoreTechnical   Float?
-  scoreEngagement  Float?
-  scoreOverall     Float?
-  citationsJson    String? // JSON array of {title,url}
-  rejectionReason  String?
-  postedManuallyAt DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  sources          PostSource[]
-  schedule         Schedule?
-  readinessJobs    ReadinessJob[]
+  scoreNovelty         Float?
+  scoreAccuracy        Float?
+  scoreHook            Float?
+  scoreReadability     Float?
+  scoreVirality        Float?
+  scoreTechnical       Float?
+  scoreEngagement      Float?
+  scoreOverall         Float?
+  citationsJson        String? // JSON array of {title,url}
+  rejectionReason      String?
+  postedManuallyAt     DateTime?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  sources              PostSource[]
+  schedule             Schedule?
+  readinessJobs        ReadinessJob[]
+  performanceSnapshots SocialPerformanceSnapshot[]
 
   @@index([userId, status])
   @@index([userId, createdAt])
   @@index([contentHash])
   @@index([platform])
+}
+
+/// Manually recorded cumulative platform metrics. Multiple snapshots preserve change over time.
+model SocialPerformanceSnapshot {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId          String
+  post            Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform        String // x | linkedin
+  impressions     Int      @default(0)
+  likes           Int      @default(0)
+  replies         Int      @default(0)
+  reposts         Int      @default(0) // reposts on X, shares on LinkedIn
+  saves           Int      @default(0)
+  profileVisits   Int      @default(0)
+  linkClicks      Int      @default(0)
+  followersBefore Int?
+  followersAfter  Int?
+  notes           String?
+  capturedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([userId, capturedAt])
+  @@index([postId, platform, capturedAt])
+}
+
+/// Conversation worth joining. X search can ingest these; LinkedIn can be entered manually.
+model EngagementOpportunity {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform       String // x | linkedin
+  url            String
+  externalId     String?
+  author         String?
+  topic          String?
+  context        String
+  suggestedReply String?
+  status         String   @default("new") // new | replied | dismissed
+  source         String   @default("manual") // manual | x_search
+  discoveredAt   DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, platform, url])
+  @@index([userId, status, discoveredAt])
 }
 
 model PostSource {

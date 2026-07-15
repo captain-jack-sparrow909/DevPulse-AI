@@ -228,24 +228,74 @@ const CONTENT_TYPES = new Set<ContentType>([
   "curated_discovery",
 ]);
 
-const VERIFIED_PROJECT_FACTS: Record<string, string[]> = {
+interface VerifiedProjectFactCard {
+  id: string;
+  label: string;
+  facts: string[];
+}
+
+const VERIFIED_PROJECT_FACT_CARDS: Record<string, VerifiedProjectFactCard[]> = {
   "devpulse-ai": [
-    "The phased pipeline stores nextChunkIndex and totalChunks as JSON metadata on ResearchRun.topicsRanked, while GenerationJob.status tracks research, write, completed, or failed state.",
-    "runPhasesWithBudget executes as many research or write phases as fit within a 52-second budget; an incomplete open job continues on the next external 15-minute cron tick.",
-    "A research-chunk exception marks that GenerationJob failed. A later cron run starts a fresh job; it does not resume a failed chunk through a retry_count column.",
-    "The fast cron path defers screenshots. Optional screenshot capture is a separate step and can store the image in Cloudflare R2.",
-    "Generated X and LinkedIn drafts require manual approval and manual posting.",
+    {
+      id: "phased-execution",
+      label: "resumable phased execution",
+      facts: [
+        "The phased pipeline stores nextChunkIndex and totalChunks as JSON metadata on ResearchRun.topicsRanked, while GenerationJob.status tracks research, write, completed, or failed state.",
+        "runPhasesWithBudget executes as many research or write phases as fit within a 52-second budget; an incomplete open job continues on the next external 15-minute cron tick.",
+        "A research-chunk exception marks that GenerationJob failed. A later cron run starts a fresh job; it does not resume a failed chunk through a retry_count column.",
+      ],
+    },
+    {
+      id: "manual-publishing",
+      label: "manual publishing boundary",
+      facts: [
+        "The application never publishes to X or LinkedIn and does not call their write APIs.",
+        "Generated X and LinkedIn drafts require manual approval, and the creator posts approved drafts manually.",
+      ],
+    },
+    {
+      id: "optional-media",
+      label: "optional screenshot workflow",
+      facts: [
+        "The fast cron path defers screenshots.",
+        "Screenshot capture is optional, runs as a separate step, and can store the image in Cloudflare R2.",
+      ],
+    },
   ],
   "rontgen-ai": [
-    "The repository describes six engineering products: Blueprint, Pulse, Atlas, Sentinel, Forge, and Radar.",
-    "The products cover architecture review, spreadsheet and SQL chat, repository explanation, PR review, issue-to-PR automation, and incident root-cause analysis.",
+    {
+      id: "product-map",
+      label: "six-product engineering workflow map",
+      facts: [
+        "The repository describes six engineering products: Blueprint, Pulse, Atlas, Sentinel, Forge, and Radar.",
+        "The products cover architecture review, spreadsheet and SQL chat, repository explanation, PR review, issue-to-PR automation, and incident root-cause analysis.",
+      ],
+    },
   ],
   intellitab: [
-    "The VS Code extension communicates with a persistent Python MLX server through length-prefixed JSON over stdin and stdout.",
-    "The README explicitly says there is no REST server, Ollama, or OpenAI-compatible API in the local completion path; it uses native IPC.",
-    "The default local model described by the README is Qwen2.5-Coder-3B base in 4-bit form at roughly 2GB.",
-    "The repository describes fill-in-the-middle prompting, adaptive imports and scope context, streaming, progressive rendering, cancel-on-type, speculative decoding, and dual-model routing on Apple Silicon.",
-    "Its README describes a hardware-dependent first-token target of roughly 150–250ms; this is a target, not a guaranteed measured result for every machine.",
+    {
+      id: "native-ipc",
+      label: "native IPC completion boundary",
+      facts: [
+        "The VS Code extension communicates with a persistent Python MLX server through length-prefixed JSON over stdin and stdout.",
+        "The README explicitly says there is no REST server, Ollama, or OpenAI-compatible API in the local completion path; it uses native IPC.",
+      ],
+    },
+    {
+      id: "local-model-target",
+      label: "local model and first-token target",
+      facts: [
+        "The default local model described by the README is Qwen2.5-Coder-3B base in 4-bit form at roughly 2GB.",
+        "Its README describes a hardware-dependent first-token target of roughly 150–250ms; this is a target, not a guaranteed measured result for every machine.",
+      ],
+    },
+    {
+      id: "completion-loop",
+      label: "completion-loop capabilities",
+      facts: [
+        "The repository describes fill-in-the-middle prompting, adaptive imports and scope context, streaming, progressive rendering, cancel-on-type, speculative decoding, and dual-model routing on Apple Silicon.",
+      ],
+    },
   ],
 };
 
@@ -353,7 +403,7 @@ export function contentTypeForSlot(
   const used = new Map<ContentType, number>();
   const rotation: ContentMixItem[] = [];
 
-  // Smoothly distribute weighted items instead of grouping all four project
+  // Smoothly distribute weighted items instead of grouping all five project
   // lessons together at the beginning of each ten-post cycle.
   for (let position = 0; position < total; position++) {
     const next = [...weighted].sort((a, b) => {
@@ -468,27 +518,37 @@ export function orderCandidatesForStrategy(
 }
 
 export function projectSources(strategy: ContentStrategyConfig): RawSourceItem[] {
-  return strategy.projects.map((project) => {
-    const facts = VERIFIED_PROJECT_FACTS[project.id] ?? [];
-    return {
-      provider: "project",
-      externalId: `owned:${project.id}`,
-      title: `${project.name}: owned project context`,
+  return strategy.projects.flatMap((project) => {
+    const configuredCards = VERIFIED_PROJECT_FACT_CARDS[project.id];
+    const cards: VerifiedProjectFactCard[] = configuredCards?.length
+      ? configuredCards
+      : [
+          {
+            id: "overview",
+            label: "verified project overview",
+            facts: [project.description],
+          },
+        ];
+
+    return cards.map((card) => ({
+      provider: "project" as const,
+      externalId: `owned:${project.id}:${card.id}`,
+      title: `${project.name}: ${card.label}`,
       url: project.url,
       summary: [
-        `Project overview: ${project.description}`,
-        facts.length ? `Verified facts:\n- ${facts.join("\n- ")}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
+        `Owned project: ${project.name} (${project.repository})`,
+        `Fact-card focus: ${card.label}`,
+        `Verified facts:\n- ${card.facts.join("\n- ")}`,
+      ].join("\n\n"),
       score: 220,
       priority: 5,
       raw: {
         repository: project.repository,
         ownedProject: true,
-        verifiedFacts: facts,
+        factCard: card.id,
+        verifiedFacts: card.facts,
       },
-    };
+    }));
   });
 }
 
@@ -500,7 +560,7 @@ export function buildStrategyPrompt(
     .map((pillar) => `- ${pillar.name}: ${pillar.description}`)
     .join("\n");
   const projects = strategy.projects
-    .map((project) => `- ${project.name} (${project.repository}): ${project.description}`)
+    .map((project) => `- ${project.name} (${project.repository})`)
     .join("\n");
-  return `Target audience: ${strategy.targetAudience}\nCreator positioning: ${strategy.positioning}\n\nEditorial pillars:\n${pillars}\n\nOwned project context:\n${projects}\n\nContent type for this slot: ${contentType.label}\n${contentType.guidance}\n\nExcluded topics:\n${strategy.excludedTopics || "None"}\n\nAuthenticity rule: owned project descriptions are trusted facts, but never invent personal experiences, failures, metrics, implementation details, or outcomes that are not explicitly supplied.`;
+  return `Target audience: ${strategy.targetAudience}\nCreator positioning: ${strategy.positioning}\n\nEditorial pillars:\n${pillars}\n\nOwned projects (identity only; the selected source is the sole factual context):\n${projects}\n\nContent type for this slot: ${contentType.label}\n${contentType.guidance}\n\nExcluded topics:\n${strategy.excludedTopics || "None"}\n\nAuthenticity rule: use only the selected source card as project facts. Never merge details from another project or fact card, and never invent personal experiences, failures, metrics, implementation details, or outcomes.`;
 }

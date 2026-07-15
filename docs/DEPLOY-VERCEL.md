@@ -106,6 +106,13 @@ Each call:
 
 **Do not** set `CRON_SYNC=1` with a 30s client timeout.
 
+Phase 4 adds performance snapshots, engagement opportunities, and explicit post content types. Apply the current Prisma schema once before opening Analytics or Engagement:
+
+```bash
+cd apps/web
+npx prisma db push
+```
+
 ### Option A — cron-job.org (free, recommended)
 
 cron-job.org free plan max request timeout is **30 seconds**. That is fine: our endpoint returns **202** immediately; research+LLM keeps running on Vercel.

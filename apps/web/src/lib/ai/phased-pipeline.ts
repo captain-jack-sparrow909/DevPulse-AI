@@ -586,7 +586,7 @@ async function runWritePhase(
         provider: source.provider,
         title: source.title,
         summary: source.summary,
-      });
+      }, { recentHooks });
       if (!selected) {
         lastError = "Writer returned no valid candidate packs";
         log(logs, `${lastError}, next source…`);
@@ -651,6 +651,7 @@ async function runWritePhase(
           writingStyleId: style?.id,
           researchRunId,
           angle,
+          contentType: contentType.type,
           hook: draft.hook,
           needsImage: false,
           imageSkipReason: "Screenshot deferred — use Recapture on the post page",

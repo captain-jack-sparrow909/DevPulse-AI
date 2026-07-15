@@ -145,7 +145,9 @@ test("near-duplicate hook similarity catches recycled openings", () => {
 });
 
 test("owned-project grounding rejects fabricated history and schema fields", () => {
-  const source = projectSources(DEFAULT_CONTENT_STRATEGY)[0]!;
+  const source = projectSources(DEFAULT_CONTENT_STRATEGY).find(
+    (item) => item.externalId === "owned:devpulse-ai:phased-execution",
+  )!;
   const fabricated = normalizeDraft(
     {
       title: "Resumable cron phases",
@@ -178,14 +180,14 @@ The lesson is to persist every transition before moving to the next phase.`,
 
 test("IntelliTab verified facts include its documented 4-bit default model", () => {
   const source = projectSources(DEFAULT_CONTENT_STRATEGY).find(
-    (item) => item.externalId === "owned:intellitab",
+    (item) => item.externalId === "owned:intellitab:local-model-target",
   );
   assert.match(source?.summary || "", /Qwen2\.5-Coder-3B base in 4-bit form/);
 });
 
 test("owned-project grounding rejects invented causal history and no-overhead claims", () => {
   const source = projectSources(DEFAULT_CONTENT_STRATEGY).find(
-    (item) => item.externalId === "owned:intellitab",
+    (item) => item.externalId === "owned:intellitab:native-ipc",
   )!;
   const draft = normalizeDraft(
     {
@@ -212,7 +214,7 @@ This forced a clean separation between the extension and the Python process.`,
 
 test("Röntgen grounding rejects inferred prompts, context, evaluations, and tradeoffs", () => {
   const source = projectSources(DEFAULT_CONTENT_STRATEGY).find(
-    (item) => item.externalId === "owned:rontgen-ai",
+    (item) => item.externalId === "owned:rontgen-ai:product-map",
   )!;
   const reportedDraft = normalizeDraft(
     {
@@ -254,15 +256,95 @@ Tradeoff accepted: more products to maintain, but each can be optimized independ
   assert.match(audit.hardFailures.join(" "), /diff/);
 });
 
+test("DevPulse grounding preserves manual publishing and optional screenshot modality", () => {
+  const sources = projectSources(DEFAULT_CONTENT_STRATEGY);
+  const publishing = sources.find(
+    (item) => item.externalId === "owned:devpulse-ai:manual-publishing",
+  )!;
+  const media = sources.find(
+    (item) => item.externalId === "owned:devpulse-ai:optional-media",
+  )!;
+  const misleadingPublishing = normalizeDraft(
+    {
+      ...strongDraft,
+      linkedIn: `${strongDraft.linkedIn}\n\nDevPulse AI never posts without human approval.`,
+      xThread: ["DevPulse AI never posts without human approval."],
+    },
+    publishing.url,
+  );
+  const guaranteedMedia = normalizeDraft(
+    {
+      ...strongDraft,
+      linkedIn: `${strongDraft.linkedIn}\n\nScreenshots are captured separately and stored in Cloudflare R2 after generation.`,
+      xThread: ["Screenshots are captured separately and stored in Cloudflare R2."],
+    },
+    media.url,
+  );
+  const publishingAudit = auditDualDraft(
+    misleadingPublishing,
+    engagementBriefForSlot(0, projectLesson),
+    { provider: publishing.provider, title: publishing.title, summary: publishing.summary },
+  );
+  const mediaAudit = auditDualDraft(
+    guaranteedMedia,
+    engagementBriefForSlot(0, projectLesson),
+    { provider: media.provider, title: media.title, summary: media.summary },
+  );
+  assert.ok(
+    publishingAudit.hardFailures.some((failure) =>
+      failure.includes("approval can trigger publishing"),
+    ),
+  );
+  assert.ok(
+    mediaAudit.hardFailures.some((failure) =>
+      failure.includes("optional screenshot storage"),
+    ),
+  );
+});
+
+test("candidate selection considers alternate hooks before abandoning a source", () => {
+  const repeated = strongDraft;
+  const alternateHook = "Native IPC changes which boundary owns a local completion request.";
+  const alternate: DualDraft = {
+    ...strongDraft,
+    title: "A different IntelliTab angle",
+    hook: alternateHook,
+    linkedIn: strongDraft.linkedIn.replace(strongDraft.hook, alternateHook),
+  };
+  const selected = selectBestDraft(
+    [repeated, alternate],
+    sourceUrl,
+    engagementBriefForSlot(0, projectLesson),
+    undefined,
+    { recentHooks: [strongDraft.hook] },
+  );
+  assert.equal(selected?.draft.hook, alternateHook);
+});
+
 test("candidate selection removes isolated unsafe narrative without another model call", () => {
   const source = projectSources(DEFAULT_CONTENT_STRATEGY).find(
-    (item) => item.externalId === "owned:intellitab",
+    (item) => item.externalId === "owned:intellitab:native-ipc",
   )!;
-  const unsafe: DualDraft = {
-    ...strongDraft,
-    linkedIn: `${strongDraft.linkedIn}\n\nDual-model routing was designed in from day one. This forced a clean IPC boundary.`,
+  const nativeIpcDraft: DualDraft = {
+    title: "IntelliTab's local completion boundary",
+    hook: "IntelliTab keeps its local completion path off HTTP.",
+    linkedIn: `IntelliTab keeps its local completion path off HTTP.
+
+The VS Code extension communicates with a persistent Python MLX server through length-prefixed JSON over stdin and stdout.
+
+The README explicitly says this path does not use a REST server, Ollama, or an OpenAI-compatible API. It uses native IPC.
+
+The useful architecture question is whether network compatibility is actually a requirement for a local, single-user tool.`,
     xThread: [
-      ...strongDraft.xThread,
+      "IntelliTab keeps its local completion path off HTTP.",
+      "The VS Code extension communicates with a persistent Python MLX server through length-prefixed JSON over stdin/stdout. The README describes native IPC, not REST, Ollama, or an OpenAI-compatible API.",
+    ],
+  };
+  const unsafe: DualDraft = {
+    ...nativeIpcDraft,
+    linkedIn: `${nativeIpcDraft.linkedIn}\n\nDual-model routing was designed in from day one. This forced a clean IPC boundary.`,
+    xThread: [
+      ...nativeIpcDraft.xThread,
       "Dual-model routing was designed in from day one. This forced a clean IPC boundary.",
     ],
   };

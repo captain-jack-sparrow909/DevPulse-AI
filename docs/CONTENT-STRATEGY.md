@@ -20,6 +20,8 @@ The creator is a software engineer building real AI products in public and shari
 
 Owned projects are seeded into each research run as first-party context. They outrank high-volume external sources for project-lesson slots, but do not dominate curated-discovery slots.
 
+Each project is split into focused verified fact cards rather than one broad source. DevPulse has separate cards for phased execution, manual publishing, and optional media; IntelliTab separates IPC, its local-model target, and completion-loop capabilities; Röntgen has a verified product-map card. Each card has its own source ID, so daily reuse penalties rotate lessons within a project and the writer cannot merge unrelated facts.
+
 | Project | Content territory |
 |---------|-------------------|
 | **DevPulse AI** | Resumable AI pipelines, cron orchestration, slot scheduling, Prisma/Postgres, DeepSeek, approval state, and R2 media storage |

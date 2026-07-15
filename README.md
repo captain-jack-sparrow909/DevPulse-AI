@@ -10,6 +10,7 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Product scope | [`project-scope.md`](./project-scope.md) |
 | Content strategy | [`docs/CONTENT-STRATEGY.md`](./docs/CONTENT-STRATEGY.md) |
 | Engagement engine | [`docs/ENGAGEMENT-ENGINE.md`](./docs/ENGAGEMENT-ENGINE.md) |
+| Engagement feedback | [`docs/ENGAGEMENT-FEEDBACK.md`](./docs/ENGAGEMENT-FEEDBACK.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---

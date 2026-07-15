@@ -799,7 +799,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         provider: source.provider,
         title: source.title,
         summary: source.summary,
-      });
+      }, { recentHooks });
       if (!selected) {
         lastError = "Writer returned no valid candidate packs";
         log(logs, `${lastError} — trying next source…`, options.onLog);
@@ -921,6 +921,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           writingStyleId: style?.id,
           researchRunId: researchRun.id,
           angle,
+          contentType: contentType.type,
           hook: draft.hook,
           needsImage: imageDecision.needsImage,
           imagePath,

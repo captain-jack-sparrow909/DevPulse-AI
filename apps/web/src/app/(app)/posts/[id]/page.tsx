@@ -11,6 +11,7 @@ import { parseJsonArray } from "@/lib/utils";
 import { format } from "date-fns";
 import { promoteDuePosts } from "@/lib/schedule/promote-ready";
 import { resolveDualContent } from "@/lib/content/platforms";
+import { PerformanceForm } from "@/components/performance-form";
 
 export default async function PostDetailPage({
   params,
@@ -29,6 +30,7 @@ export default async function PostDetailPage({
       writingStyle: true,
       sources: { include: { source: true } },
       readinessJobs: true,
+      performanceSnapshots: { orderBy: { capturedAt: "desc" } },
     },
   });
   if (!post) notFound();
@@ -234,6 +236,25 @@ export default async function PostDetailPage({
           </Card>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Post-performance feedback</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-zinc-500">
+            Enter cumulative platform metrics at a consistent age—ideally 24 hours after posting.
+            These snapshots power the Analytics recommendations.
+          </p>
+          <PerformanceForm
+            postId={post.id}
+            snapshots={post.performanceSnapshots.map((snapshot) => ({
+              ...snapshot,
+              capturedAt: snapshot.capturedAt.toISOString(),
+            }))}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

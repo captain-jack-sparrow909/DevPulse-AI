@@ -22,6 +22,26 @@ test("default strategy contains all three owned projects", () => {
   );
 });
 
+test("owned projects are split into focused, reusable fact cards", () => {
+  const sources = projectSources(DEFAULT_CONTENT_STRATEGY);
+  assert.equal(sources.length, 7);
+  assert.equal(new Set(sources.map((source) => source.externalId)).size, 7);
+  assert.ok(
+    sources.some(
+      (source) =>
+        source.externalId === "owned:devpulse-ai:manual-publishing" &&
+        source.summary?.includes("never publishes to X or LinkedIn"),
+    ),
+  );
+  assert.ok(
+    sources.some(
+      (source) =>
+        source.externalId === "owned:intellitab:local-model-target" &&
+        source.summary?.includes("target, not a guaranteed measured result"),
+    ),
+  );
+});
+
 test("content rotation preserves and distributes the product-first 5/2/1/1/1 mix", () => {
   const firstCycle = Array.from({ length: 10 }, (_, index) =>
     contentTypeForSlot(index, DEFAULT_CONTENT_STRATEGY.contentMix).type,
@@ -73,7 +93,9 @@ test("off-brand medical content is rejected by strategy relevance", () => {
 });
 
 test("owned projects outrank popular unrelated sources for project lessons", () => {
-  const owned = projectSources(DEFAULT_CONTENT_STRATEGY)[2]!;
+  const owned = projectSources(DEFAULT_CONTENT_STRATEGY).find(
+    (item) => item.externalId === "owned:intellitab:native-ipc",
+  )!;
   const unrelated: RawSourceItem = {
     provider: "github",
     externalId: "popular-unrelated",
@@ -97,7 +119,9 @@ test("owned projects outrank popular unrelated sources for project lessons", () 
 });
 
 test("curated slots prefer relevant external discoveries over owned context", () => {
-  const owned = projectSources(DEFAULT_CONTENT_STRATEGY)[0]!;
+  const owned = projectSources(DEFAULT_CONTENT_STRATEGY).find(
+    (item) => item.externalId === "owned:devpulse-ai:phased-execution",
+  )!;
   const discovery: RawSourceItem = {
     provider: "rss",
     externalId: "agent-evals",

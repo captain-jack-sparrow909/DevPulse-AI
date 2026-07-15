@@ -49,7 +49,7 @@ export default async function DashboardPage() {
       <PageHeader
         kicker="Overview"
         title={`Welcome back, ${session.user.name?.split(" ")[0] || "there"}`}
-        description="Research runs in 4 small chunks then a write step (each under 60s). You only approve and post — use Recapture for screenshots."
+        description="Product-first research creates a verified draft for each slot. You approve and post manually, then record platform results in Analytics."
         actions={
           <>
             <Link href="/posts?status=pending_review" className="w-full sm:w-auto">

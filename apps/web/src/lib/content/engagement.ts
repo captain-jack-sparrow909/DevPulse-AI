@@ -65,6 +65,9 @@ const UNSUPPORTED_HISTORY = /\b(?:early on|at first|initially|from day one|from 
 const UNSUPPORTED_CAUSAL = /\b(?:this|that) (?:forced|caused|led to|meant)\b/i;
 const UNSUPPORTED_ABSOLUTE = /\b(?:no|zero) (?:overhead|latency|cost|failures?|tradeoffs?)\b/i;
 const UNSUPPORTED_TRADEOFF = /\b(?:forces? tradeoffs?|tradeoff accepted|optimized? independently|more [^.]{0,80} to maintain|monolith[^.]{0,100}compromise)\b/i;
+const APPROVAL_IMPLIES_AUTOPUBLISH = /\b(?:never|does not|doesn't) (?:automatically )?posts?[^.]{0,100}\bwithout (?:human )?approval\b/i;
+const OPTIONAL_SCREENSHOT_ASSERTION = /\b(?:screenshots?|captures?|images?|cloudflare r2)\b[^.]{0,140}\b(?:captur(?:e|es|ed)|stor(?:e|es|ed))\b|\b(?:captur(?:e|es|ed)|stor(?:e|es|ed))\b[^.]{0,140}\b(?:screenshots?|images?|cloudflare r2)\b/i;
+const MODAL_QUALIFIER = /\b(?:optional(?:ly)?|can|could|may|might|if|when requested|on demand)\b/i;
 
 /**
  * Architecture concepts are only safe when the selected owned-project source
@@ -103,6 +106,8 @@ const PROJECT_TECH_CONCEPTS: Array<{ label: string; pattern: RegExp }> = [
   { label: "benchmark", pattern: /\bbenchmarks?\b/i },
   { label: "metric", pattern: /\bmetrics?\b/i },
   { label: "state machine", pattern: /\bstate machines?\b/i },
+  { label: "screenshot", pattern: /\bscreenshots?\b/i },
+  { label: "Cloudflare R2", pattern: /\b(?:cloudflare )?r2\b/i },
 ];
 
 function clamp(value: number): number {
@@ -133,6 +138,14 @@ function unsupportedProjectConcepts(
   ).map(({ label }) => label);
 }
 
+function sourceRequiresManualPosting(sourceFacts: string): boolean {
+  return (
+    /manual posting/i.test(sourceFacts) ||
+    /creator posts?[^.]{0,80}\bmanually\b/i.test(sourceFacts) ||
+    /never publishes? to x or linkedin/i.test(sourceFacts)
+  );
+}
+
 function hasUnsupportedProjectClaim(
   sentence: string,
   sourceFacts?: string,
@@ -140,7 +153,11 @@ function hasUnsupportedProjectClaim(
   if (!sourceFacts) return false;
   return (
     unsupportedProjectConcepts(sentence, sourceFacts).length > 0 ||
-    (UNSUPPORTED_TRADEOFF.test(sentence) && !UNSUPPORTED_TRADEOFF.test(sourceFacts))
+    (UNSUPPORTED_TRADEOFF.test(sentence) && !UNSUPPORTED_TRADEOFF.test(sourceFacts)) ||
+    (APPROVAL_IMPLIES_AUTOPUBLISH.test(sentence) && sourceRequiresManualPosting(sourceFacts)) ||
+    (OPTIONAL_SCREENSHOT_ASSERTION.test(sentence) &&
+      /optional screenshot|can store/i.test(sourceFacts) &&
+      !MODAL_QUALIFIER.test(sentence))
   );
 }
 
@@ -260,6 +277,8 @@ export function buildEngagementPrompt(brief: EngagementBrief): string {
 - Treat the selected source as the sole factual basis. Other project descriptions are positioning context, not facts to merge into this post.
 - For an owned-project source, first-person builder framing such as "I'm building..." is allowed. Keep every architecture claim tied to the supplied project description.
 - An architecture breakdown is not permission to infer internals. If the source only lists product boundaries or responsibilities, explain only those boundaries. Do not invent prompts, evaluations, schemas, diffs, context assembly, routing, models, services, maintenance costs, or optimization choices.
+- Preserve factual modality. "Optional", "can", "may", and "target" must never become a guaranteed action or result.
+- Manual approval and manual posting are separate boundaries. Never write "the app does not post without approval", because that implies approval can trigger publishing. If the source says posting is manual, say the app never publishes and the creator posts manually.
 - Never use "we", "our", or "us" for an owned project; this is an individual creator account. Use "I" only for the supplied builder context, or name the project directly.
 - Do not infer a before/after story from an architecture description. Never invent an earlier failure, a fix, a database field, an enum, a retry counter, cost savings, speedup, benchmark, or outcome.
 - Do not use causal history such as "designed from day one", "this forced", or "this led to" unless that relationship is explicitly supplied. Describe independently verified design choices without inventing why they happened.
@@ -395,6 +414,25 @@ export function auditDualDraft(
     if (UNSUPPORTED_TRADEOFF.test(claimText) && !UNSUPPORTED_TRADEOFF.test(sourceFacts)) {
       hardFailures.push("Owned-project draft invents an unsupported maintenance or tradeoff claim");
     }
+    if (
+      APPROVAL_IMPLIES_AUTOPUBLISH.test(claimText) &&
+      sourceRequiresManualPosting(sourceFacts)
+    ) {
+      hardFailures.push("Owned-project draft incorrectly implies approval can trigger publishing");
+    }
+    const screenshotAssertions = claimText
+      .split(/(?<=[.!?])\s+/)
+      .filter(
+        (sentence) =>
+          OPTIONAL_SCREENSHOT_ASSERTION.test(sentence) &&
+          !MODAL_QUALIFIER.test(sentence),
+      );
+    if (
+      screenshotAssertions.length &&
+      /optional screenshot|can store/i.test(sourceFacts)
+    ) {
+      hardFailures.push("Owned-project draft turns optional screenshot storage into a guaranteed step");
+    }
 
     const unsupportedConcepts = unsupportedProjectConcepts(claimText, sourceFacts);
     if (unsupportedConcepts.length) {
@@ -495,6 +533,7 @@ export function selectBestDraft(
   sourceUrl: string,
   brief: EngagementBrief,
   grounding?: DraftGrounding,
+  options: { recentHooks?: string[] } = {},
 ): { draft: DualDraft; audit: DraftAudit } | null {
   const ranked = candidates
     .map((candidate) => {
@@ -506,7 +545,9 @@ export function selectBestDraft(
           failure.includes("causal relationship") ||
           failure.includes("absolute performance") ||
           failure.includes("maintenance or tradeoff") ||
-          failure.includes("unsupported architecture concepts"),
+          failure.includes("unsupported architecture concepts") ||
+          failure.includes("approval can trigger publishing") ||
+          failure.includes("optional screenshot storage"),
       );
       if (grounding?.provider === "project" && hasRepairableNarrative) {
         const repairedDraft = normalizeDraft(
@@ -519,6 +560,15 @@ export function selectBestDraft(
           draft = repairedDraft;
           audit = repairedAudit;
         }
+      }
+      const hookSimilarity = maxTextSimilarity(
+        draft.hook,
+        options.recentHooks ?? [],
+      );
+      if (hookSimilarity > 0.72) {
+        audit.hardFailures.push(
+          `Hook repeats a recent post (${Math.round(hookSimilarity * 100)}% similar)`,
+        );
       }
       return { draft, audit };
     })

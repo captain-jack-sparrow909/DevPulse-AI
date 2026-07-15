@@ -14,6 +14,8 @@ import {
   Search,
   Menu,
   X,
+  BarChart3,
+  MessageCircleMore,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -25,6 +27,8 @@ const nav = [
   { href: "/posts", label: "Posts", icon: FileText },
   { href: "/generate", label: "Generate", icon: Sparkles },
   { href: "/research", label: "Research", icon: Radar },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/engagement", label: "Engagement", icon: MessageCircleMore },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

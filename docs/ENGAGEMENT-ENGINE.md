@@ -49,9 +49,12 @@ Hard failures include missing X copy, over-limit X posts, unusable openings, pla
 - The selected source is the sole factual basis for a post.
 - Other owned-project descriptions provide positioning context but must not be merged into the selected project's story.
 - Owned-project sources include a curated set of verified implementation facts. DevPulse AI's facts distinguish resumable work between cron ticks from failed jobs that start fresh.
+- Owned projects are divided into focused fact cards. The selected card—not the project's full description—is the sole factual context for that draft.
+- Optional capabilities must remain optional, targets must remain targets, and manual approval must never be phrased as permission for automatic publishing.
 - The writer may not invent personal failures, before/after stories, benchmarks, usage numbers, schema fields, implementation details, or outcomes.
 - Owned-project drafts reject unsupported numbers, code identifiers, collective `we/our/us` voice, and historical claims such as `early on` unless supplied by the source.
 - New hooks are compared with up to 100 recent openings. Near-duplicates are rejected even when the full content hash differs.
+- Both DeepSeek candidates are checked for hook similarity before one is selected, so a repeated winner does not discard a usable alternate from the same response.
 
 ## Configuration
 
