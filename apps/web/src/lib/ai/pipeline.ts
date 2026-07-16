@@ -41,9 +41,9 @@ import {
   buildStrategyPrompt,
   contentTypeForSlot,
   orderCandidatesForStrategy,
-  projectSources,
   strategyFromRecord,
 } from "@/lib/content/strategy";
+import { markProjectFactUsed, projectSourcesForUser } from "@/lib/projects/fact-sources";
 import {
   buildEngagementPrompt,
   engagementBriefForSlot,
@@ -596,7 +596,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     );
 
     const rawSources = [
-      ...projectSources(strategy),
+      ...(await projectSourcesForUser(options.userId, strategy)),
       ...(await collectAllSources({
         mode: researchMode,
         contentType: contentType.type,
@@ -1005,6 +1005,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           },
         }),
       ]);
+      await markProjectFactUsed(source);
 
       produced = 1;
       break;

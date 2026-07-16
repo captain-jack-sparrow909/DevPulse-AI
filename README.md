@@ -13,6 +13,7 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Engagement feedback | [`docs/ENGAGEMENT-FEEDBACK.md`](./docs/ENGAGEMENT-FEEDBACK.md) |
 | Adaptive growth | [`docs/ADAPTIVE-GROWTH.md`](./docs/ADAPTIVE-GROWTH.md) |
 | Visual content | [`docs/VISUAL-CONTENT.md`](./docs/VISUAL-CONTENT.md) |
+| Project intelligence | [`docs/PROJECT-INTELLIGENCE.md`](./docs/PROJECT-INTELLIGENCE.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -29,6 +30,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 6. Leaves you a **ready pack**: copy text → attach image → post yourself → mark as posted
 7. Runs controlled X/LinkedIn experiments and applies a winning pattern only after your approval
 8. Renders grounded branded PNG cards and LinkedIn carousel PDFs for manual attachment
+9. Turns recent owned-repository changes into reviewable facts before they can influence generation
 
 ---
 
@@ -151,6 +153,7 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/research` | Ingested sources |
 | `/analytics` | Actual performance, recommendations, and bulk CSV metric import |
 | `/experiments` | Controlled hook, ending, and X-format tests with approval-gated learning |
+| `/projects` | Owned-repository sync, noise audit, and approval-gated project facts |
 | `/engagement` | Manual conversation opportunities and locally saved reply drafts |
 | `/schedule` | Slot timeline |
 | `/settings` | Topics, writing style, cadence, timezone, models |
@@ -235,6 +238,7 @@ DevPulse AI/
 | 4 | Done | Performance snapshots, analytics and manual engagement opportunities |
 | 5 | Done | Generation snapshots, controlled experiments, CSV import and approval-gated learning |
 | 6 | Done | Visual brand settings, grounded technical cards, carousels and media experiments |
+| 7 | Done | Incremental owned-repository intelligence, significance filtering and reviewed fact sources |
 
 ---
 

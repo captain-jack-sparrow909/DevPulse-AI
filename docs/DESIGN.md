@@ -21,6 +21,7 @@ DevPulse is **research-first**:
 7. **Measure** real engagement without confusing generation scores with distribution (Phase 4).
 8. **Learn carefully** through controlled, approval-gated experiments (Phase 5).
 9. **Repurpose visually** with grounded branded cards and carousels (Phase 6).
+10. **Refresh owned-project evidence** from reviewed repository changes (Phase 7).
 
 For a single user on free/cheap tiers, complexity must stay low: one deployable app, DB-backed jobs instead of Redis at first, free public APIs for research, DeepSeek for LLM, Supabase when ready.
 
@@ -174,6 +175,13 @@ When a post benefits from media (repos, papers, demos, many LinkedIn posts), Chr
 - Brand settings and deterministic 4:5 technical cards
 - Flattened LinkedIn carousel PDFs and manual download packs
 - Media-type experiments and analytics breakdowns
+
+### Phase 7 — Project intelligence
+- Read-only incremental sync for owned GitHub repositories
+- Deterministic routine-change filtering with an auditable noise reason
+- Pending project facts linked to commits, merged pull requests, or releases
+- Human approval before a fact can influence generation or visual briefs
+- Usage-aware ranking so fresh, unused approved evidence is preferred
 
 ---
 

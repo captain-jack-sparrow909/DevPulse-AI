@@ -43,9 +43,9 @@ import {
   buildStrategyPrompt,
   contentTypeForSlot,
   orderCandidatesForStrategy,
-  projectSources,
   type ContentType,
 } from "@/lib/content/strategy";
+import { markProjectFactUsed, projectSourcesForUser } from "@/lib/projects/fact-sources";
 import {
   buildEngagementPrompt,
   engagementBriefForSlot,
@@ -258,7 +258,7 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
 
   const ownedProjectSources = await persistSources(
     researchRun.id,
-    projectSources(strategy),
+    await projectSourcesForUser(userId, strategy),
   );
 
   const job = await prisma.generationJob.create({
@@ -714,6 +714,7 @@ async function runWritePhase(
           },
         },
       });
+      await markProjectFactUsed(source);
 
       produced = 1;
       log(

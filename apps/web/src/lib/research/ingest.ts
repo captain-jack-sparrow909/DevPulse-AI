@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { collectAllSources, describeSourceMix, type RawSourceItem } from "@/lib/integrations";
 import { getContentStrategy } from "@/lib/content/strategy-store";
-import { projectSources } from "@/lib/content/strategy";
+import { projectSourcesForUser } from "@/lib/projects/fact-sources";
 
 /**
  * Diversify the list so one provider cannot flood storage/ranking.
@@ -73,7 +73,7 @@ export async function ingestResearchFeed(userId: string): Promise<IngestResult> 
         strategy,
       }),
     ]);
-    const raw = [...projectSources(strategy), ...curated, ...community];
+    const raw = [...(await projectSourcesForUser(userId, strategy)), ...curated, ...community];
     log(`Raw fetch: ${raw.length} · ${describeSourceMix(raw)}`);
 
     const diversified = diversifySources(raw, 150, 16);

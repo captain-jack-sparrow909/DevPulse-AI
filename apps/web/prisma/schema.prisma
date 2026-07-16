@@ -36,6 +36,8 @@ model User {
   strategyRecommendations StrategyRecommendation[]
   brandSettings           BrandSettings?
   visualAssets            PostVisualAsset[]
+  ownedRepositories       OwnedRepository[]
+  projectFacts            ProjectFact[]
 }
 
 model Session {
@@ -151,6 +153,85 @@ model ModelConfig {
   isDefault   Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+/// A GitHub repository owned by the user and monitored for product evidence.
+/// Sync is read-only; DevPulse never mutates the upstream repository.
+model OwnedRepository {
+  id            String             @id @default(cuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId     String
+  name          String
+  owner         String
+  repo          String
+  fullName      String
+  url           String
+  defaultBranch String             @default("main")
+  active        Boolean            @default(true)
+  syncStatus    String             @default("never_synced") // never_synced | running | completed | failed
+  lastSyncedAt  DateTime?
+  lastCommitSha String?
+  lastError     String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  changes       RepositoryChange[]
+  facts         ProjectFact[]
+
+  @@unique([userId, fullName])
+  @@index([userId, active])
+}
+
+/// Immutable evidence discovered during an incremental repository sync.
+model RepositoryChange {
+  id                String          @id @default(cuid())
+  repositoryId      String
+  repository        OwnedRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  externalId        String
+  kind              String // commit | pull_request | release
+  title             String
+  summary           String?
+  url               String
+  author            String?
+  occurredAt        DateTime
+  changedFilesJson  String          @default("[]")
+  additions         Int?
+  deletions         Int?
+  rawJson           String?
+  significanceScore Int             @default(0)
+  status            String          @default("candidate") // candidate | noise | fact_created
+  noiseReason       String?
+  createdAt         DateTime        @default(now())
+  fact              ProjectFact?
+
+  @@unique([repositoryId, kind, externalId])
+  @@index([repositoryId, occurredAt])
+  @@index([repositoryId, status])
+}
+
+/// A human-reviewed, evidence-backed claim that may be used by generation.
+model ProjectFact {
+  id           String            @id @default(cuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository   OwnedRepository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  changeId     String?           @unique
+  change       RepositoryChange? @relation(fields: [changeId], references: [id], onDelete: SetNull)
+  projectId    String
+  title        String
+  claim        String
+  evidenceJson String
+  sourceUrl    String
+  confidence   Float             @default(0.75)
+  reviewStatus String            @default("pending") // pending | approved | rejected
+  useCount     Int               @default(0)
+  lastUsedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([userId, reviewStatus, createdAt])
+  @@index([repositoryId, reviewStatus])
 }
 
 model Source {
