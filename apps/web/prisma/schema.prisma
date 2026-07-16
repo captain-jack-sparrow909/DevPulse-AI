@@ -38,6 +38,9 @@ model User {
   visualAssets            PostVisualAsset[]
   ownedRepositories       OwnedRepository[]
   projectFacts            ProjectFact[]
+  creatorRelationships    CreatorRelationship[]
+  distributionWorkflows   DistributionWorkflow[]
+  contentSignals          ContentSignal[]
 }
 
 model Session {
@@ -324,6 +327,8 @@ model Post {
   mediaTypeX                   String                      @default("text_only")
   mediaTypeLinkedIn            String                      @default("text_only")
   visualAssets                 PostVisualAsset[]
+  distributionWorkflows        DistributionWorkflow[]
+  contentSignals               ContentSignal[]
 
   @@index([userId, status])
   @@index([userId, createdAt])
@@ -463,9 +468,9 @@ model SocialPerformanceSnapshot {
 
 /// Conversation worth joining. X search can ingest these; LinkedIn can be entered manually.
 model EngagementOpportunity {
-  id             String   @id @default(cuid())
+  id             String               @id @default(cuid())
   userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform       String // x | linkedin
   url            String
   externalId     String?
@@ -473,13 +478,89 @@ model EngagementOpportunity {
   topic          String?
   context        String
   suggestedReply String?
-  status         String   @default("new") // new | replied | dismissed
-  source         String   @default("manual") // manual | x_search
-  discoveredAt   DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status         String               @default("new") // new | replied | dismissed
+  source         String               @default("manual") // manual | x_search
+  priorityScore  Int                  @default(50)
+  priorityReason String?
+  repliedAt      DateTime?
+  outcome        String?
+  relationshipId String?
+  relationship   CreatorRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  contentSignals ContentSignal[]
+  discoveredAt   DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
   @@unique([userId, platform, url])
   @@index([userId, status, discoveredAt])
+  @@index([userId, status, priorityScore])
+  @@index([relationshipId])
+}
+
+/// A creator or engineer the user repeatedly engages with manually.
+model CreatorRelationship {
+  id                String                  @id @default(cuid())
+  userId            String
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform          String // x | linkedin
+  handle            String
+  displayName       String?
+  profileUrl        String?
+  topicsJson        String                  @default("[]")
+  notes             String?
+  status            String                  @default("active") // active | watch | muted
+  priorityScore     Int                     @default(50)
+  interactionCount  Int                     @default(0)
+  replyCount        Int                     @default(0)
+  lastInteractionAt DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  opportunities     EngagementOpportunity[]
+
+  @@unique([userId, platform, handle])
+  @@index([userId, status, priorityScore])
+}
+
+/// Platform-specific manual distribution checklist for a generated post.
+model DistributionWorkflow {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId             String
+  post               Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform           String // x | linkedin
+  status             String    @default("planned") // planned | prepared | published | follow_up | completed
+  assetReadyAt       DateTime?
+  preEngagedAt       DateTime?
+  publishedAt        DateTime?
+  commentsReviewedAt DateTime?
+  metricsCapturedAt  DateTime?
+  completedAt        DateTime?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([postId, platform])
+  @@index([userId, status, updatedAt])
+}
+
+/// A question, objection, or idea captured from a real audience conversation.
+model ContentSignal {
+  id            String                 @id @default(cuid())
+  userId        String
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunityId String?
+  opportunity   EngagementOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  postId        String?
+  post          Post?                  @relation(fields: [postId], references: [id], onDelete: SetNull)
+  kind          String                 @default("question") // question | objection | idea
+  text          String
+  sourceUrl     String?
+  status        String                 @default("saved") // saved | used | dismissed
+  createdAt     DateTime               @default(now())
+  usedAt        DateTime?
+
+  @@index([userId, status, createdAt])
+  @@index([opportunityId])
 }
 
 model PostSource {

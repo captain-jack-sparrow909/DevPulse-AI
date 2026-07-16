@@ -404,6 +404,9 @@ Phase 6 — completed
 
 Phase 7 — completed
 - Owned-repository sync, meaningful-change filtering, fact review, and approved evidence sources
+
+Phase 8 — completed
+- Manual platform distribution cycles, ranked conversations, relationship tracking, grounded replies, and audience content signals
 ```
 
 ## One additional recommendation

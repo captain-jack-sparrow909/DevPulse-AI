@@ -14,6 +14,7 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Adaptive growth | [`docs/ADAPTIVE-GROWTH.md`](./docs/ADAPTIVE-GROWTH.md) |
 | Visual content | [`docs/VISUAL-CONTENT.md`](./docs/VISUAL-CONTENT.md) |
 | Project intelligence | [`docs/PROJECT-INTELLIGENCE.md`](./docs/PROJECT-INTELLIGENCE.md) |
+| Distribution engine | [`docs/DISTRIBUTION-ENGINE.md`](./docs/DISTRIBUTION-ENGINE.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -31,6 +32,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 7. Runs controlled X/LinkedIn experiments and applies a winning pattern only after your approval
 8. Renders grounded branded PNG cards and LinkedIn carousel PDFs for manual attachment
 9. Turns recent owned-repository changes into reviewable facts before they can influence generation
+10. Organizes manual distribution, grounded replies, relationships, and audience-driven follow-up content
 
 ---
 
@@ -155,6 +157,7 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/experiments` | Controlled hook, ending, and X-format tests with approval-gated learning |
 | `/projects` | Owned-repository sync, noise audit, and approval-gated project facts |
 | `/engagement` | Manual conversation opportunities and locally saved reply drafts |
+| `/distribution` | Daily publishing cycles, ranked conversations, relationships, and content signals |
 | `/schedule` | Slot timeline |
 | `/settings` | Topics, writing style, cadence, timezone, models |
 | `/api/cron/slot` | Cron: one due-slot generation per user |
@@ -239,6 +242,7 @@ DevPulse AI/
 | 5 | Done | Generation snapshots, controlled experiments, CSV import and approval-gated learning |
 | 6 | Done | Visual brand settings, grounded technical cards, carousels and media experiments |
 | 7 | Done | Incremental owned-repository intelligence, significance filtering and reviewed fact sources |
+| 8 | Done | Manual distribution workflows, grounded reply assistance, relationship tracking and audience signals |
 
 ---
 

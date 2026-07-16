@@ -18,6 +18,7 @@ import {
   MessageCircleMore,
   FlaskConical,
   GitBranch,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -33,6 +34,7 @@ const nav = [
   { href: "/experiments", label: "Experiments", icon: FlaskConical },
   { href: "/projects", label: "Projects", icon: GitBranch },
   { href: "/engagement", label: "Engagement", icon: MessageCircleMore },
+  { href: "/distribution", label: "Distribution", icon: Send },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

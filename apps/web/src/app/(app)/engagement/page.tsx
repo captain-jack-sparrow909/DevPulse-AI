@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
@@ -21,6 +22,11 @@ export default async function EngagementPage() {
         kicker="Distribution"
         title="Engagement opportunities"
         description="Join relevant engineering conversations manually. This feed is separate from post generation and never publishes for you."
+        actions={
+          <Link href="/distribution" className="inline-flex h-10 items-center justify-center rounded-xl border border-teal-400/20 bg-teal-400/[0.07] px-4 text-sm font-medium text-teal-200 transition hover:bg-teal-400/[0.12]">
+            Open distribution workspace
+          </Link>
+        }
       />
       <Card className="border-violet-500/15 bg-violet-500/[0.03]">
         <CardHeader>
@@ -43,4 +49,3 @@ export default async function EngagementPage() {
     </div>
   );
 }
-
