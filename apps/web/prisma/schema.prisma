@@ -41,6 +41,8 @@ model User {
   creatorRelationships    CreatorRelationship[]
   distributionWorkflows   DistributionWorkflow[]
   contentSignals          ContentSignal[]
+  campaigns               Campaign[]
+  campaignMetricSnapshots CampaignMetricSnapshot[]
 }
 
 model Session {
@@ -214,24 +216,25 @@ model RepositoryChange {
 
 /// A human-reviewed, evidence-backed claim that may be used by generation.
 model ProjectFact {
-  id           String            @id @default(cuid())
-  userId       String
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  repositoryId String
-  repository   OwnedRepository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  changeId     String?           @unique
-  change       RepositoryChange? @relation(fields: [changeId], references: [id], onDelete: SetNull)
-  projectId    String
-  title        String
-  claim        String
-  evidenceJson String
-  sourceUrl    String
-  confidence   Float             @default(0.75)
-  reviewStatus String            @default("pending") // pending | approved | rejected
-  useCount     Int               @default(0)
-  lastUsedAt   DateTime?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id            String            @id @default(cuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repositoryId  String
+  repository    OwnedRepository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  changeId      String?           @unique
+  change        RepositoryChange? @relation(fields: [changeId], references: [id], onDelete: SetNull)
+  projectId     String
+  title         String
+  claim         String
+  evidenceJson  String
+  sourceUrl     String
+  confidence    Float             @default(0.75)
+  reviewStatus  String            @default("pending") // pending | approved | rejected
+  useCount      Int               @default(0)
+  lastUsedAt    DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  campaignItems CampaignItem[]
 
   @@index([userId, reviewStatus, createdAt])
   @@index([repositoryId, reviewStatus])
@@ -329,6 +332,7 @@ model Post {
   visualAssets                 PostVisualAsset[]
   distributionWorkflows        DistributionWorkflow[]
   contentSignals               ContentSignal[]
+  campaignItem                 CampaignItem?
 
   @@index([userId, status])
   @@index([userId, createdAt])
@@ -558,9 +562,87 @@ model ContentSignal {
   status        String                 @default("saved") // saved | used | dismissed
   createdAt     DateTime               @default(now())
   usedAt        DateTime?
+  campaignItems CampaignItem[]
 
   @@index([userId, status, createdAt])
   @@index([opportunityId])
+}
+
+/// A goal-driven sequence of evidence-backed posts for one owned product.
+model Campaign {
+  id                   String                   @id @default(cuid())
+  userId               String
+  user                 User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                 String
+  projectId            String
+  projectName          String
+  goal                 String // followers | github_stars | awareness | beta_users | credibility
+  goalMetric           String
+  goalTarget           Int?
+  baselineValue        Int?
+  platforms            String                   @default("x,linkedin")
+  status               String                   @default("draft") // draft | active | paused | completed
+  startAt              DateTime
+  endAt                DateTime
+  ctaMode              String                   @default("follow") // follow | repository | try_product | join_waitlist | question
+  ctaTextX             String?
+  ctaTextLinkedIn      String?
+  destinationUrl       String?
+  notes                String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  items                CampaignItem[]
+  performanceSnapshots CampaignMetricSnapshot[]
+
+  @@index([userId, status, startAt])
+  @@index([userId, projectId])
+}
+
+/// One narrative stage in a campaign. It links to a regular Post only after drafting.
+model CampaignItem {
+  id              String         @id @default(cuid())
+  campaignId      String
+  campaign        Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  sequence        Int
+  stage           String // problem | decision | implementation | progress | audience | proof | recap
+  label           String
+  purpose         String
+  status          String         @default("planned") // planned | blocked | drafted | skipped
+  scheduledFor    DateTime
+  postId          String?        @unique
+  post            Post?          @relation(fields: [postId], references: [id], onDelete: SetNull)
+  evidenceKind    String // project_context | project_fact | audience_signal | fact_bundle
+  projectFactId   String?
+  projectFact     ProjectFact?   @relation(fields: [projectFactId], references: [id], onDelete: SetNull)
+  contentSignalId String?
+  contentSignal   ContentSignal? @relation(fields: [contentSignalId], references: [id], onDelete: SetNull)
+  evidenceJson    String
+  ctaJson         String         @default("{}")
+  blockReason     String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([campaignId, sequence])
+  @@index([campaignId, status, scheduledFor])
+  @@index([projectFactId])
+  @@index([contentSignalId])
+}
+
+/// Manually captured destination metrics such as GitHub stars or waitlist users.
+model CampaignMetricSnapshot {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  metric     String
+  value      Int
+  notes      String?
+  capturedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([campaignId, metric, capturedAt])
+  @@index([userId, capturedAt])
 }
 
 model PostSource {

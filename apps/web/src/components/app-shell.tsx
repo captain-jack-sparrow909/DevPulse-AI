@@ -19,6 +19,7 @@ import {
   FlaskConical,
   GitBranch,
   Send,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -35,6 +36,7 @@ const nav = [
   { href: "/projects", label: "Projects", icon: GitBranch },
   { href: "/engagement", label: "Engagement", icon: MessageCircleMore },
   { href: "/distribution", label: "Distribution", icon: Send },
+  { href: "/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

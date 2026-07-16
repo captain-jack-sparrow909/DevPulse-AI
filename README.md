@@ -15,6 +15,7 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Visual content | [`docs/VISUAL-CONTENT.md`](./docs/VISUAL-CONTENT.md) |
 | Project intelligence | [`docs/PROJECT-INTELLIGENCE.md`](./docs/PROJECT-INTELLIGENCE.md) |
 | Distribution engine | [`docs/DISTRIBUTION-ENGINE.md`](./docs/DISTRIBUTION-ENGINE.md) |
+| Campaign orchestration | [`docs/CAMPAIGNS.md`](./docs/CAMPAIGNS.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -33,6 +34,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 8. Renders grounded branded PNG cards and LinkedIn carousel PDFs for manual attachment
 9. Turns recent owned-repository changes into reviewable facts before they can influence generation
 10. Organizes manual distribution, grounded replies, relationships, and audience-driven follow-up content
+11. Coordinates evidence-backed product campaigns with measurable goals and manual review
 
 ---
 
@@ -158,6 +160,7 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/projects` | Owned-repository sync, noise audit, and approval-gated project facts |
 | `/engagement` | Manual conversation opportunities and locally saved reply drafts |
 | `/distribution` | Daily publishing cycles, ranked conversations, relationships, and content signals |
+| `/campaigns` | Goal-driven product narratives, evidence gates, campaign drafts, and results |
 | `/schedule` | Slot timeline |
 | `/settings` | Topics, writing style, cadence, timezone, models |
 | `/api/cron/slot` | Cron: one due-slot generation per user |
@@ -243,6 +246,7 @@ DevPulse AI/
 | 6 | Done | Visual brand settings, grounded technical cards, carousels and media experiments |
 | 7 | Done | Incremental owned-repository intelligence, significance filtering and reviewed fact sources |
 | 8 | Done | Manual distribution workflows, grounded reply assistance, relationship tracking and audience signals |
+| 9 | Done | Evidence-gated product campaigns, platform-native narrative stages and campaign analytics |
 
 ---
 

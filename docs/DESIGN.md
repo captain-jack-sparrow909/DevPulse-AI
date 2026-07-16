@@ -23,6 +23,7 @@ DevPulse is **research-first**:
 9. **Repurpose visually** with grounded branded cards and carousels (Phase 6).
 10. **Refresh owned-project evidence** from reviewed repository changes (Phase 7).
 11. **Operate distribution manually** with ranked conversations and measurable follow-up (Phase 8).
+12. **Build product narratives** through evidence-gated campaigns with measurable goals (Phase 9).
 
 For a single user on free/cheap tiers, complexity must stay low: one deployable app, DB-backed jobs instead of Redis at first, free public APIs for research, DeepSeek for LLM, Supabase when ready.
 
@@ -190,6 +191,13 @@ When a post benefits from media (repos, papers, demos, many LinkedIn posts), Chr
 - Grounded reply drafts with strict manual posting
 - Creator relationship history built from recorded manual interactions
 - Comment-to-content signals and assisted-versus-baseline analytics
+
+### Phase 9 — Campaigns and launch orchestration
+- Seven-stage product narratives across X and LinkedIn
+- Approved project facts and audience signals as explicit evidence gates
+- Campaign drafts stored as normal posts without consuming regular slots
+- Manual activate, pause, reorder, skip, review, and completion controls
+- Goal snapshots and campaign-versus-isolated-post performance comparison
 
 ---
 
