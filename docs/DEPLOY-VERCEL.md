@@ -106,7 +106,7 @@ Each call:
 
 **Do not** set `CRON_SYNC=1` with a 30s client timeout.
 
-Phase 4 adds performance snapshots and engagement opportunities. Phase 5 adds growth experiments and generation snapshots. Phase 6 adds brand settings, generated visual assets, and media-type tracking. Phase 7 adds owned repositories, repository changes, and reviewed project facts. Phase 8 adds distribution workflows, creator relationships, and audience content signals. Phase 9 adds campaigns, evidence-gated campaign items, and campaign goal snapshots. Apply the current Prisma schema once before opening Analytics, Engagement, Experiments, Projects, Distribution, Campaigns, or the Visual content studio:
+Phase 4 adds performance snapshots and engagement opportunities. Phase 5 adds growth experiments and generation snapshots. Phase 6 adds brand settings, generated visual assets, and media-type tracking. Phase 7 adds owned repositories, repository changes, and reviewed project facts. Phase 8 adds distribution workflows, creator relationships, and audience content signals. Phase 9 adds campaigns, evidence-gated campaign items, and campaign goal snapshots. Phase 10 adds tracked links, temporary click windows, explicit conversions, and CTA experiments. Apply the current Prisma schema once before opening Analytics, Engagement, Experiments, Projects, Distribution, Campaigns, Attribution, or the Visual content studio:
 
 ```bash
 cd apps/web

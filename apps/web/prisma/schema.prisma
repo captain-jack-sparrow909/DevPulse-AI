@@ -43,6 +43,8 @@ model User {
   contentSignals          ContentSignal[]
   campaigns               Campaign[]
   campaignMetricSnapshots CampaignMetricSnapshot[]
+  trackedLinks            TrackedLink[]
+  conversionEvents        ConversionEvent[]
 }
 
 model Session {
@@ -333,6 +335,8 @@ model Post {
   distributionWorkflows        DistributionWorkflow[]
   contentSignals               ContentSignal[]
   campaignItem                 CampaignItem?
+  trackedLinks                 TrackedLink[]
+  conversionEvents             ConversionEvent[]
 
   @@index([userId, status])
   @@index([userId, createdAt])
@@ -417,6 +421,8 @@ model GrowthExperimentVariant {
   createdAt          DateTime                 @default(now())
   posts              Post[]
   recommendationWins StrategyRecommendation[] @relation("WinningVariant")
+  trackedLinks       TrackedLink[]
+  conversionEvents   ConversionEvent[]
 
   @@unique([experimentId, key])
   @@index([experimentId])
@@ -593,6 +599,8 @@ model Campaign {
   updatedAt            DateTime                 @updatedAt
   items                CampaignItem[]
   performanceSnapshots CampaignMetricSnapshot[]
+  trackedLinks         TrackedLink[]
+  conversionEvents     ConversionEvent[]
 
   @@index([userId, status, startAt])
   @@index([userId, projectId])
@@ -600,27 +608,29 @@ model Campaign {
 
 /// One narrative stage in a campaign. It links to a regular Post only after drafting.
 model CampaignItem {
-  id              String         @id @default(cuid())
-  campaignId      String
-  campaign        Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  sequence        Int
-  stage           String // problem | decision | implementation | progress | audience | proof | recap
-  label           String
-  purpose         String
-  status          String         @default("planned") // planned | blocked | drafted | skipped
-  scheduledFor    DateTime
-  postId          String?        @unique
-  post            Post?          @relation(fields: [postId], references: [id], onDelete: SetNull)
-  evidenceKind    String // project_context | project_fact | audience_signal | fact_bundle
-  projectFactId   String?
-  projectFact     ProjectFact?   @relation(fields: [projectFactId], references: [id], onDelete: SetNull)
-  contentSignalId String?
-  contentSignal   ContentSignal? @relation(fields: [contentSignalId], references: [id], onDelete: SetNull)
-  evidenceJson    String
-  ctaJson         String         @default("{}")
-  blockReason     String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id               String            @id @default(cuid())
+  campaignId       String
+  campaign         Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  sequence         Int
+  stage            String // problem | decision | implementation | progress | audience | proof | recap
+  label            String
+  purpose          String
+  status           String            @default("planned") // planned | blocked | drafted | skipped
+  scheduledFor     DateTime
+  postId           String?           @unique
+  post             Post?             @relation(fields: [postId], references: [id], onDelete: SetNull)
+  evidenceKind     String // project_context | project_fact | audience_signal | fact_bundle
+  projectFactId    String?
+  projectFact      ProjectFact?      @relation(fields: [projectFactId], references: [id], onDelete: SetNull)
+  contentSignalId  String?
+  contentSignal    ContentSignal?    @relation(fields: [contentSignalId], references: [id], onDelete: SetNull)
+  evidenceJson     String
+  ctaJson          String            @default("{}")
+  blockReason      String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  trackedLinks     TrackedLink[]
+  conversionEvents ConversionEvent[]
 
   @@unique([campaignId, sequence])
   @@index([campaignId, status, scheduledFor])
@@ -643,6 +653,88 @@ model CampaignMetricSnapshot {
 
   @@index([campaignId, metric, capturedAt])
   @@index([userId, capturedAt])
+}
+
+/// Privacy-safe redirect owned by a user. Visitor identifiers are never stored.
+model TrackedLink {
+  id                  String                   @id @default(cuid())
+  userId              String
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug                String                   @unique
+  label               String
+  destinationUrl      String
+  platform            String // x | linkedin
+  status              String                   @default("active") // active | paused
+  appendUtm           Boolean                  @default(true)
+  ctaVariant          String                   @default("default")
+  ctaPlacement        String                   @default("final") // inline | final
+  postId              String?
+  post                Post?                    @relation(fields: [postId], references: [id], onDelete: SetNull)
+  campaignId          String?
+  campaign            Campaign?                @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  campaignItemId      String?
+  campaignItem        CampaignItem?            @relation(fields: [campaignItemId], references: [id], onDelete: SetNull)
+  experimentVariantId String?
+  experimentVariant   GrowthExperimentVariant? @relation(fields: [experimentVariantId], references: [id], onDelete: SetNull)
+  clicksCount         Int                      @default(0)
+  botHits             Int                      @default(0)
+  lastClickedAt       DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  windows             TrackedLinkWindow[]
+  conversions         ConversionEvent[]
+
+  @@index([userId, status, createdAt])
+  @@index([postId, platform])
+  @@index([campaignId, campaignItemId])
+  @@index([experimentVariantId])
+}
+
+/// Five-second aggregate window. Raw visits and obvious bots are counted,
+/// but no IP address, user agent, cookie, or visitor fingerprint is persisted.
+model TrackedLinkWindow {
+  id            String      @id @default(cuid())
+  trackedLinkId String
+  trackedLink   TrackedLink @relation(fields: [trackedLinkId], references: [id], onDelete: Cascade)
+  bucketStart   DateTime
+  rawHits       Int         @default(0)
+  countedClicks Int         @default(0)
+  botHits       Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([trackedLinkId, bucketStart])
+  @@index([bucketStart])
+}
+
+/// Explicit product or follower outcome. Sources remain visibly manual,
+/// imported, webhook, or tracked instead of being inferred from engagement.
+model ConversionEvent {
+  id                  String                   @id @default(cuid())
+  userId              String
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventType           String // github_star | beta_signup | waitlist_signup | follower | repository_visit | conversion
+  value               Int                      @default(1)
+  source              String                   @default("manual") // manual | import | webhook | tracked
+  platform            String?
+  trackedLinkId       String?
+  trackedLink         TrackedLink?             @relation(fields: [trackedLinkId], references: [id], onDelete: SetNull)
+  postId              String?
+  post                Post?                    @relation(fields: [postId], references: [id], onDelete: SetNull)
+  campaignId          String?
+  campaign            Campaign?                @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  campaignItemId      String?
+  campaignItem        CampaignItem?            @relation(fields: [campaignItemId], references: [id], onDelete: SetNull)
+  experimentVariantId String?
+  experimentVariant   GrowthExperimentVariant? @relation(fields: [experimentVariantId], references: [id], onDelete: SetNull)
+  notes               String?
+  occurredAt          DateTime                 @default(now())
+  createdAt           DateTime                 @default(now())
+
+  @@index([userId, eventType, occurredAt])
+  @@index([trackedLinkId, occurredAt])
+  @@index([campaignId, campaignItemId])
+  @@index([experimentVariantId])
 }
 
 model PostSource {

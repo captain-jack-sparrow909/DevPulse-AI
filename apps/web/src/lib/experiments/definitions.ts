@@ -2,6 +2,8 @@ import type {
   EngagementBrief,
   EndingPattern,
   HookPattern,
+  CtaPattern,
+  CtaPlacement,
 } from "@/lib/content/engagement";
 
 export type ExperimentPlatform = "x" | "linkedin";
@@ -9,7 +11,9 @@ export type ExperimentDimension =
   | "hook_pattern"
   | "ending_pattern"
   | "x_format"
-  | "media_type";
+  | "media_type"
+  | "cta_pattern"
+  | "cta_placement";
 export type ExperimentMetric =
   | "engagement_rate"
   | "reply_rate"
@@ -23,6 +27,8 @@ export interface ExperimentVariantConfig {
   endingPattern?: EndingPattern;
   xFormat?: EngagementBrief["xFormat"];
   mediaType?: "text_only" | "branded_visual";
+  ctaPattern?: CtaPattern;
+  ctaPlacement?: CtaPlacement;
 }
 
 export interface ExperimentPreset {
@@ -103,6 +109,24 @@ export const EXPERIMENT_DIMENSIONS: Record<
       },
     ],
   },
+  cta_pattern: {
+    label: "CTA pattern",
+    description: "Compare a direct value invitation with one focused technical question.",
+    platforms: ["x", "linkedin"],
+    variants: [
+      { key: "direct-value", label: "Direct value", config: { ctaPattern: "direct-value" } },
+      { key: "question-led", label: "Question led", config: { ctaPattern: "question-led" } },
+    ],
+  },
+  cta_placement: {
+    label: "CTA placement",
+    description: "Compare an inline contextual invitation with a final-paragraph CTA.",
+    platforms: ["x", "linkedin"],
+    variants: [
+      { key: "inline", label: "Inline", config: { ctaPlacement: "inline" } },
+      { key: "final", label: "Final", config: { ctaPlacement: "final" } },
+    ],
+  },
 };
 
 export const EXPERIMENT_METRICS: Array<{ value: ExperimentMetric; label: string }> = [
@@ -151,6 +175,8 @@ export function applyBriefOverrides(
       ...(override.config.hookPattern ? { hookPattern: override.config.hookPattern } : {}),
       ...(override.config.endingPattern ? { endingPattern: override.config.endingPattern } : {}),
       ...(override.config.xFormat ? { xFormat: override.config.xFormat } : {}),
+      ...(override.config.ctaPattern ? { ctaPattern: override.config.ctaPattern } : {}),
+      ...(override.config.ctaPlacement ? { ctaPlacement: override.config.ctaPlacement } : {}),
     };
     platformOverrides[override.platform] = {
       ...(platformOverrides[override.platform] ?? {}),

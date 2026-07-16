@@ -24,6 +24,7 @@ DevPulse is **research-first**:
 10. **Refresh owned-project evidence** from reviewed repository changes (Phase 7).
 11. **Operate distribution manually** with ranked conversations and measurable follow-up (Phase 8).
 12. **Build product narratives** through evidence-gated campaigns with measurable goals (Phase 9).
+13. **Attribute outcomes safely** from aggregate clicks to explicit conversions (Phase 10).
 
 For a single user on free/cheap tiers, complexity must stay low: one deployable app, DB-backed jobs instead of Redis at first, free public APIs for research, DeepSeek for LLM, Supabase when ready.
 
@@ -198,6 +199,13 @@ When a post benefits from media (repos, papers, demos, many LinkedIn posts), Chr
 - Campaign drafts stored as normal posts without consuming regular slots
 - Manual activate, pause, reorder, skip, review, and completion controls
 - Goal snapshots and campaign-versus-isolated-post performance comparison
+
+### Phase 10 — Attribution and conversion intelligence
+- Privacy-safe aggregate redirects with no visitor identifiers
+- Post, platform, campaign-stage, CTA, and experiment-variant attribution
+- Explicit conversion events with visible provenance
+- Complete impression → click → conversion → follow funnel diagnosis
+- CTA wording and placement dimensions in controlled Phase 5 experiments
 
 ---
 

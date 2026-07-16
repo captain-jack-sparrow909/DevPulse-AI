@@ -20,6 +20,7 @@ import {
   GitBranch,
   Send,
   Megaphone,
+  MousePointerClick,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -37,6 +38,7 @@ const nav = [
   { href: "/engagement", label: "Engagement", icon: MessageCircleMore },
   { href: "/distribution", label: "Distribution", icon: Send },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
+  { href: "/attribution", label: "Attribution", icon: MousePointerClick },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

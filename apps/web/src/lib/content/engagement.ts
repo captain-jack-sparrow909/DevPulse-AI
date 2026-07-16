@@ -16,6 +16,8 @@ export type HookPattern =
   | "why-it-matters";
 
 export type EndingPattern = "targeted-question" | "tradeoff-invitation" | "practical-takeaway";
+export type CtaPattern = "direct-value" | "question-led";
+export type CtaPlacement = "inline" | "final";
 
 export interface EngagementBrief {
   hookPattern: HookPattern;
@@ -27,10 +29,14 @@ export interface EngagementBrief {
       hookPattern?: HookPattern;
       endingPattern?: EndingPattern;
       xFormat?: EngagementBrief["xFormat"];
+      ctaPattern?: CtaPattern;
+      ctaPlacement?: CtaPlacement;
     };
     linkedin?: {
       hookPattern?: HookPattern;
       endingPattern?: EndingPattern;
+      ctaPattern?: CtaPattern;
+      ctaPlacement?: CtaPlacement;
     };
   };
 }
@@ -280,6 +286,10 @@ export function buildEngagementPrompt(brief: EngagementBrief): string {
   const linkedInEnding = brief.platformOverrides?.linkedin?.endingPattern ?? brief.endingPattern;
   const xEnding = brief.platformOverrides?.x?.endingPattern ?? brief.endingPattern;
   const xFormat = brief.platformOverrides?.x?.xFormat ?? brief.xFormat;
+  const linkedInCtaPattern = brief.platformOverrides?.linkedin?.ctaPattern;
+  const xCtaPattern = brief.platformOverrides?.x?.ctaPattern;
+  const linkedInCtaPlacement = brief.platformOverrides?.linkedin?.ctaPlacement;
+  const xCtaPlacement = brief.platformOverrides?.x?.ctaPlacement;
 
   return `Engagement playbook for this slot:
 - LinkedIn hook pattern: ${linkedInHook}. X hook pattern: ${xHook}. Each first line must expose a real constraint, decision, result, or surprising implication in under 140 characters.
@@ -288,6 +298,7 @@ export function buildEngagementPrompt(brief: EngagementBrief): string {
 - LinkedIn close: ${endingInstruction(linkedInEnding)}
 - X close: ${endingInstruction(xEnding)}
 - X format: ${xFormat}. Prefer one strong standalone post when the idea fits; use a 2–3 post thread only when each post advances the explanation.
+- LinkedIn CTA treatment: ${linkedInCtaPattern || "natural close"}; placement: ${linkedInCtaPlacement || "final"}. X CTA treatment: ${xCtaPattern || "natural close"}; placement: ${xCtaPlacement || "final"}. A direct-value CTA must name what the reader gets; a question-led CTA must ask one answerable, technical question. Never invent urgency or force a CTA when the source provides no relevant next step.
 - The first X post must stand alone. Never open with "Thread", a topic label, or a vague teaser.
 - Write X and LinkedIn independently for their platforms. Do not split or compress the LinkedIn copy into tweets.
 - Use zero hashtags by default and no more than one when genuinely useful. No engagement bait.

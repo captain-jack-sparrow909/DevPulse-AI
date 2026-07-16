@@ -48,6 +48,8 @@ Drafting creates a normal DevPulse `Post` with:
 
 Open the generated post to edit, approve, create visuals, and publish manually. Once approved, Phase 8 automatically creates its X and LinkedIn distribution workflows.
 
+When the campaign stage has a destination CTA, Phase 10 also creates separate tracked X and LinkedIn URLs and inserts the appropriate URL into each platform draft.
+
 ## Calls to action
 
 Only the audience stage and final recap receive campaign CTAs by default. Campaign goals select the CTA mode:

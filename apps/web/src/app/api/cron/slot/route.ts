@@ -78,6 +78,7 @@ async function runCronWork(): Promise<{
             generationJobsDeleted: cleanup.generationJobsDeleted,
             screenshotsDeleted: cleanup.screenshotsDeleted,
             visualAssetsDeleted: cleanup.visualAssetsDeleted,
+            attributionWindowsDeleted: cleanup.attributionWindowsDeleted,
           }
         : undefined,
     };

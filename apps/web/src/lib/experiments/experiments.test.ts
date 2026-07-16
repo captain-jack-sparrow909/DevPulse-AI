@@ -41,6 +41,17 @@ test("media experiments are available independently on X and LinkedIn", () => {
   );
 });
 
+test("CTA experiments expose wording and placement independently", () => {
+  assert.deepEqual(
+    EXPERIMENT_DIMENSIONS.cta_pattern.variants.map((variant) => variant.config.ctaPattern),
+    ["direct-value", "question-led"],
+  );
+  assert.deepEqual(
+    EXPERIMENT_DIMENSIONS.cta_placement.variants.map((variant) => variant.config.ctaPlacement),
+    ["inline", "final"],
+  );
+});
+
 function variant(id: string, rates: number[]): ExperimentVariantInput {
   return {
     id,

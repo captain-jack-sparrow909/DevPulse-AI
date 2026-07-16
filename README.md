@@ -16,6 +16,7 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Project intelligence | [`docs/PROJECT-INTELLIGENCE.md`](./docs/PROJECT-INTELLIGENCE.md) |
 | Distribution engine | [`docs/DISTRIBUTION-ENGINE.md`](./docs/DISTRIBUTION-ENGINE.md) |
 | Campaign orchestration | [`docs/CAMPAIGNS.md`](./docs/CAMPAIGNS.md) |
+| Attribution | [`docs/ATTRIBUTION.md`](./docs/ATTRIBUTION.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -35,6 +36,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 9. Turns recent owned-repository changes into reviewable facts before they can influence generation
 10. Organizes manual distribution, grounded replies, relationships, and audience-driven follow-up content
 11. Coordinates evidence-backed product campaigns with measurable goals and manual review
+12. Measures the privacy-safe funnel from impressions to clicks, conversions, and follower growth
 
 ---
 
@@ -161,6 +163,8 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/engagement` | Manual conversation opportunities and locally saved reply drafts |
 | `/distribution` | Daily publishing cycles, ranked conversations, relationships, and content signals |
 | `/campaigns` | Goal-driven product narratives, evidence gates, campaign drafts, and results |
+| `/attribution` | Tracked links, explicit conversions, funnel diagnosis, and CTA evidence |
+| `/r/[slug]` | Public privacy-safe aggregate redirect for user-created tracked links |
 | `/schedule` | Slot timeline |
 | `/settings` | Topics, writing style, cadence, timezone, models |
 | `/api/cron/slot` | Cron: one due-slot generation per user |
@@ -247,6 +251,7 @@ DevPulse AI/
 | 7 | Done | Incremental owned-repository intelligence, significance filtering and reviewed fact sources |
 | 8 | Done | Manual distribution workflows, grounded reply assistance, relationship tracking and audience signals |
 | 9 | Done | Evidence-gated product campaigns, platform-native narrative stages and campaign analytics |
+| 10 | Done | Privacy-safe link attribution, explicit conversion evidence, funnel analytics and CTA experiments |
 
 ---
 

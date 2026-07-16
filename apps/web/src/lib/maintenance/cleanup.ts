@@ -7,6 +7,7 @@ import { deleteVisualFile } from "@/lib/visuals/storage";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const POST_RETENTION_DAYS = 30;
 const SCREENSHOT_RETENTION_DAYS = 1;
+const ATTRIBUTION_WINDOW_RETENTION_DAYS = 90;
 
 export interface CleanupResult {
   postsDeleted: number;
@@ -15,6 +16,7 @@ export interface CleanupResult {
   generationJobsDeleted: number;
   screenshotsDeleted: number;
   visualAssetsDeleted: number;
+  attributionWindowsDeleted: number;
   logs: string[];
 }
 
@@ -84,6 +86,17 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     // table may be empty / fine
   }
 
+  // Per-five-second redirect windows are temporary dedupe aggregates. Lifetime
+  // totals remain on TrackedLink after detailed windows expire.
+  const attributionWindows = await prisma.trackedLinkWindow.deleteMany({
+    where: {
+      bucketStart: {
+        lt: new Date(Date.now() - ATTRIBUTION_WINDOW_RETENTION_DAYS * DAY_MS),
+      },
+    },
+  });
+  log(`Deleted ${attributionWindows.count} attribution windows older than ${ATTRIBUTION_WINDOW_RETENTION_DAYS}d`);
+
   let screenshotsDeleted = await cleanupOldScreenshots(SCREENSHOT_RETENTION_DAYS, log);
 
   if (isR2Configured()) {
@@ -106,6 +119,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     generationJobsDeleted: oldJobs.count,
     screenshotsDeleted,
     visualAssetsDeleted: oldVisualAssets.length,
+    attributionWindowsDeleted: attributionWindows.count,
     logs,
   };
 }

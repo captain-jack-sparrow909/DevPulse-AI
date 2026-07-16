@@ -6,12 +6,15 @@ import {
   engagementBriefForSlot,
   parseDraftCandidates,
   selectBestDraft,
+  auditDualDraft,
   type DualDraft,
 } from "@/lib/content/engagement";
 import type { ContentMixItem, ContentType } from "@/lib/content/strategy";
 import { scoreDualDraft } from "@/lib/ai/scoring";
 import { contentHash } from "@/lib/hash";
 import { DEFAULT_WRITING_STYLE } from "@/lib/constants";
+import { enforceXLimit } from "@/lib/content/platforms";
+import { createTrackedLink, trackedLinkUrl } from "@/lib/attribution/links";
 import {
   buildCampaignPlan,
   CAMPAIGN_GOALS,
@@ -283,7 +286,51 @@ export async function generateCampaignItem(userId: string, campaignId: string, i
   if (!selected || selected.audit.hardFailures.length) {
     throw new Error(selected?.audit.hardFailures.join("; ") || "Writer returned no grounded campaign draft");
   }
-  const { draft, audit } = selected;
+  let { draft, audit } = selected;
+  const attributionLinks: Array<{ id: string; platform: string; url: string }> = [];
+  if (cta.mode !== "none" && cta.destinationUrl) {
+    const platforms = item.campaign.platforms.split(",").filter(
+      (platform): platform is "x" | "linkedin" => platform === "x" || platform === "linkedin",
+    );
+    for (const platform of platforms) {
+      const link = await createTrackedLink(userId, {
+        label: `${item.campaign.name} · ${item.label} · ${platform.toUpperCase()}`,
+        destinationUrl: cta.destinationUrl,
+        platform,
+        campaignId,
+        campaignItemId: item.id,
+        ctaVariant: cta.mode,
+        ctaPlacement: "final",
+      });
+      attributionLinks.push({ id: link.id, platform, url: trackedLinkUrl(link.slug) });
+    }
+    const linkedInUrl = attributionLinks.find((link) => link.platform === "linkedin")?.url;
+    const xUrl = attributionLinks.find((link) => link.platform === "x")?.url;
+    if (linkedInUrl) {
+      const linkedIn = cta.destinationUrl && draft.linkedIn.includes(cta.destinationUrl)
+        ? draft.linkedIn.replaceAll(cta.destinationUrl, linkedInUrl)
+        : `${draft.linkedIn}\n\n${cta.linkedin || "Learn more:"}\n${linkedInUrl}`;
+      draft = { ...draft, linkedIn };
+    }
+    if (xUrl) {
+      const xThread = draft.xThread.map((part) =>
+        cta.destinationUrl ? part.replaceAll(cta.destinationUrl, xUrl) : part,
+      );
+      if (!xThread.some((part) => part.includes(xUrl))) {
+        const addition = `${cta.x || "Learn more:"}\n${xUrl}`;
+        const lastIndex = xThread.length - 1;
+        const combined = `${xThread[lastIndex] || ""}\n\n${addition}`.trim();
+        if (combined.length <= 280 && lastIndex >= 0) xThread[lastIndex] = combined;
+        else xThread.push(addition);
+      }
+      draft = { ...draft, xThread: enforceXLimit(xThread) };
+    }
+    audit = auditDualDraft(draft, brief, grounding);
+    if (audit.hardFailures.length) {
+      await prisma.trackedLink.deleteMany({ where: { id: { in: attributionLinks.map((link) => link.id) } } });
+      throw new Error(audit.hardFailures.join("; "));
+    }
+  }
   const scores = scoreDualDraft(draft, audit);
   const hash = contentHash(`${draft.linkedIn}\n---\n${draft.xThread.join("\n")}`);
   const duplicate = await prisma.post.findFirst({ where: { userId, contentHash: hash }, select: { id: true } });
@@ -309,8 +356,10 @@ export async function generateCampaignItem(userId: string, campaignId: string, i
       fetchedAt: new Date(),
     },
   });
-  const post = await prisma.post.create({
-    data: {
+  let post: { id: string; experimentVariantId: string | null };
+  try {
+    post = await prisma.post.create({
+      data: {
       userId,
       platform: item.campaign.platforms.includes(",") ? "both" : item.campaign.platforms,
       format: draft.xThread.length > 1 ? "dual-thread" : "dual",
@@ -352,8 +401,20 @@ export async function generateCampaignItem(userId: string, campaignId: string, i
       recommendedMediaTypeLinkedIn:
         item.stage === "decision" || item.stage === "implementation" ? "carousel" : "branded_visual",
       sources: { create: [{ sourceId: source.id }] },
-    },
-  });
+      },
+    });
+  } catch (error) {
+    if (attributionLinks.length) {
+      await prisma.trackedLink.deleteMany({ where: { id: { in: attributionLinks.map((link) => link.id) } } });
+    }
+    throw error;
+  }
+  if (attributionLinks.length) {
+    await prisma.trackedLink.updateMany({
+      where: { id: { in: attributionLinks.map((link) => link.id) }, userId },
+      data: { postId: post.id, experimentVariantId: post.experimentVariantId },
+    });
+  }
   await prisma.campaignItem.update({
     where: { id: item.id },
     data: { postId: post.id, status: "drafted", blockReason: null },
