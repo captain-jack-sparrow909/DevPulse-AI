@@ -8,7 +8,8 @@ export type ExperimentPlatform = "x" | "linkedin";
 export type ExperimentDimension =
   | "hook_pattern"
   | "ending_pattern"
-  | "x_format";
+  | "x_format"
+  | "media_type";
 export type ExperimentMetric =
   | "engagement_rate"
   | "reply_rate"
@@ -21,6 +22,7 @@ export interface ExperimentVariantConfig {
   hookPattern?: HookPattern;
   endingPattern?: EndingPattern;
   xFormat?: EngagementBrief["xFormat"];
+  mediaType?: "text_only" | "branded_visual";
 }
 
 export interface ExperimentPreset {
@@ -84,6 +86,23 @@ export const EXPERIMENT_DIMENSIONS: Record<
       },
     ],
   },
+  media_type: {
+    label: "Media type",
+    description: "Compare the same editorial system with text only versus a branded technical card.",
+    platforms: ["x", "linkedin"],
+    variants: [
+      {
+        key: "text-only",
+        label: "Text only",
+        config: { mediaType: "text_only" },
+      },
+      {
+        key: "branded-visual",
+        label: "Branded visual",
+        config: { mediaType: "branded_visual" },
+      },
+    ],
+  },
 };
 
 export const EXPERIMENT_METRICS: Array<{ value: ExperimentMetric; label: string }> = [
@@ -128,9 +147,14 @@ export function applyBriefOverrides(
 ): EngagementBrief {
   const platformOverrides = { ...(base.platformOverrides ?? {}) };
   for (const override of overrides) {
+    const writingConfig = {
+      ...(override.config.hookPattern ? { hookPattern: override.config.hookPattern } : {}),
+      ...(override.config.endingPattern ? { endingPattern: override.config.endingPattern } : {}),
+      ...(override.config.xFormat ? { xFormat: override.config.xFormat } : {}),
+    };
     platformOverrides[override.platform] = {
       ...(platformOverrides[override.platform] ?? {}),
-      ...override.config,
+      ...writingConfig,
     };
   }
   return { ...base, platformOverrides };
@@ -145,4 +169,3 @@ export function chooseBalancedVariant<T extends { id: string; assignedPosts: num
   const tied = variants.filter((variant) => variant.assignedPosts === minimum);
   return tied[Math.abs(slotIndex) % tied.length] ?? tied[0] ?? null;
 }
-

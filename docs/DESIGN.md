@@ -20,6 +20,7 @@ DevPulse is **research-first**:
 6. **Schedule** across 6am–9pm (12 slots).
 7. **Measure** real engagement without confusing generation scores with distribution (Phase 4).
 8. **Learn carefully** through controlled, approval-gated experiments (Phase 5).
+9. **Repurpose visually** with grounded branded cards and carousels (Phase 6).
 
 For a single user on free/cheap tiers, complexity must stay low: one deployable app, DB-backed jobs instead of Redis at first, free public APIs for research, DeepSeek for LLM, Supabase when ready.
 
@@ -168,6 +169,11 @@ When a post benefits from media (repos, papers, demos, many LinkedIn posts), Chr
 - Immutable generation snapshots and balanced controlled experiments
 - Bulk CSV performance import
 - Evidence-gated recommendations that require explicit approval
+
+### Phase 6 — Visual content
+- Brand settings and deterministic 4:5 technical cards
+- Flattened LinkedIn carousel PDFs and manual download packs
+- Media-type experiments and analytics breakdowns
 
 ---
 

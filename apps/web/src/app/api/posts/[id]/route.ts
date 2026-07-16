@@ -6,6 +6,8 @@ import { contentHash } from "@/lib/hash";
 import { assertManualOnly } from "@/lib/publish/adapters";
 import { capturePageScreenshot, shouldIncludeImage } from "@/lib/screenshots/capture";
 import { enforceXLimit, parseThreadJson } from "@/lib/content/platforms";
+import { parseVariantConfig } from "@/lib/experiments/definitions";
+import { deleteVisualFile } from "@/lib/visuals/storage";
 
 async function getUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -43,7 +45,10 @@ export async function PATCH(
   const { id } = await params;
   const post = await prisma.post.findFirst({
     where: { id, userId: user.id },
-    include: { sources: { include: { source: true } } },
+    include: {
+      sources: { include: { source: true } },
+      experimentVariant: { include: { experiment: true } },
+    },
   });
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -182,6 +187,24 @@ export async function PATCH(
         { status: 400 },
       );
     }
+    const experimentConfig = parseVariantConfig(post.experimentVariant?.configJson);
+    const experimentPlatform = post.experimentVariant?.experiment?.platform === "linkedin"
+      ? "linkedin"
+      : "x";
+    const actualExperimentMedia = experimentPlatform === "linkedin"
+      ? post.mediaTypeLinkedIn
+      : post.mediaTypeX;
+    if (experimentConfig.mediaType && actualExperimentMedia !== experimentConfig.mediaType) {
+      return NextResponse.json(
+        {
+          error:
+            experimentConfig.mediaType === "text_only"
+              ? "This experiment variant must be posted without an attached visual. Delete generated assets first."
+              : "Generate and attach the branded portrait card before marking this experiment post as published.",
+        },
+        { status: 409 },
+      );
+    }
     const policy = assertManualOnly();
     await prisma.readinessJob.updateMany({
       where: { postId: id },
@@ -272,9 +295,18 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const post = await prisma.post.findFirst({ where: { id, userId: user.id } });
+  const post = await prisma.post.findFirst({
+    where: { id, userId: user.id },
+    include: { visualAssets: true },
+  });
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  for (const asset of post.visualAssets) {
+    await deleteVisualFile(asset.storageKey, asset.filePath);
+    if (asset.previewStorageKey !== asset.storageKey) {
+      await deleteVisualFile(asset.previewStorageKey, asset.previewPath);
+    }
+  }
   await prisma.post.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

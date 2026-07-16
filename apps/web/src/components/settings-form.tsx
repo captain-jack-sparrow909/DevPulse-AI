@@ -32,6 +32,15 @@ type Model = {
   temperature: number;
   isDefault: boolean;
 };
+type Brand = {
+  displayName: string;
+  handle: string;
+  tagline: string;
+  accentColor: string;
+  backgroundColor: string;
+  textColor: string;
+  footerText: string;
+};
 
 export function SettingsForm({
   settings: initialSettings,
@@ -39,12 +48,14 @@ export function SettingsForm({
   styles: initialStyles,
   models: initialModels,
   strategy: initialStrategy,
+  brand: initialBrand,
 }: {
   settings: Settings;
   topics: Topic[];
   styles: Style[];
   models: Model[];
   strategy: ContentStrategyConfig;
+  brand: Brand;
 }) {
   const router = useRouter();
   const [settings, setSettings] = useState(initialSettings);
@@ -52,6 +63,7 @@ export function SettingsForm({
   const [styles] = useState(initialStyles);
   const [models] = useState(initialModels);
   const [strategy, setStrategy] = useState(initialStrategy);
+  const [brand, setBrand] = useState(initialBrand);
   const [newTopic, setNewTopic] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -140,6 +152,57 @@ export function SettingsForm({
               Save general settings
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Visual brand</CardTitle>
+          <CardDescription>Identity and colors used by technical cards and LinkedIn carousels</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Display name</label>
+              <Input value={brand.displayName} onChange={(event) => setBrand({ ...brand, displayName: event.target.value })} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Social handle</label>
+              <Input value={brand.handle} onChange={(event) => setBrand({ ...brand, handle: event.target.value })} placeholder="@codeCaptain404" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-zinc-400">Tagline</label>
+              <Input value={brand.tagline} onChange={(event) => setBrand({ ...brand, tagline: event.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-zinc-400">Footer line</label>
+              <Input value={brand.footerText} onChange={(event) => setBrand({ ...brand, footerText: event.target.value })} />
+            </div>
+            {([
+              ["accentColor", "Accent"],
+              ["backgroundColor", "Background"],
+              ["textColor", "Text"],
+            ] as const).map(([field, label]) => (
+              <label key={field} className="space-y-1 text-xs text-zinc-400">
+                <span>{label} color</span>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={brand[field]}
+                    onChange={(event) => setBrand({ ...brand, [field]: event.target.value })}
+                    className="h-10 w-12 rounded-lg border border-white/10 bg-black/30 p-1"
+                  />
+                  <Input value={brand[field]} onChange={(event) => setBrand({ ...brand, [field]: event.target.value })} />
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="rounded-xl border border-white/[0.07] p-4" style={{ background: brand.backgroundColor }}>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: brand.accentColor }}>{brand.tagline}</div>
+            <div className="mt-2 text-xl font-semibold" style={{ color: brand.textColor }}>{brand.displayName}</div>
+            <div className="mt-1 text-xs text-zinc-400">{brand.handle} · {brand.footerText}</div>
+          </div>
+          <Button disabled={busy} onClick={() => patch({ brand })}>Save visual brand</Button>
         </CardContent>
       </Card>
 

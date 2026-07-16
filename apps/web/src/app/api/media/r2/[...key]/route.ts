@@ -15,7 +15,10 @@ export async function GET(
 
   const { key: parts } = await params;
   const key = parts.map(decodeURIComponent).join("/");
-  if (!key.startsWith("screenshots/") || key.includes("..")) {
+  if (
+    (!key.startsWith("screenshots/") && !key.startsWith("visuals/")) ||
+    key.includes("..")
+  ) {
     return NextResponse.json({ error: "Invalid key" }, { status: 400 });
   }
 

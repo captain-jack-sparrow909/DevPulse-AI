@@ -56,6 +56,7 @@ import {
 import { sourceItemKey, upsertResearchSources } from "@/lib/research/source-store";
 import {
   buildGenerationSnapshot,
+  recommendedMediaTypeForContent,
   resolveGenerationLearning,
 } from "@/lib/experiments/service";
 
@@ -761,6 +762,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     const baseEngagementBrief = engagementBriefForSlot(slotIndex, contentType);
     const learning = await resolveGenerationLearning(options.userId, slotIndex, baseEngagementBrief);
     const engagementBrief = learning.brief;
+    const recommendedMediaByPlatform = recommendedMediaTypeForContent(contentType, learning);
     if (learning.experiment) {
       log(
         logs,
@@ -943,6 +945,12 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           contentType: contentType.type,
           hook: draft.hook,
           experimentVariantId: learning.experimentVariantId,
+          recommendedMediaType:
+            recommendedMediaByPlatform.x === recommendedMediaByPlatform.linkedin
+              ? recommendedMediaByPlatform.x
+              : "mixed",
+          recommendedMediaTypeX: recommendedMediaByPlatform.x,
+          recommendedMediaTypeLinkedIn: recommendedMediaByPlatform.linkedin,
           generationSnapshotJson: buildGenerationSnapshot({
             slotIndex,
             scheduledFor,
@@ -951,6 +959,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
             strategy,
             source,
             learning,
+            recommendedMediaByPlatform,
           }),
           needsImage: imageDecision.needsImage,
           imagePath,

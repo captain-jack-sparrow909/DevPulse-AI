@@ -107,7 +107,7 @@ function client(): S3Client {
   return new S3Client(withChecksum);
 }
 
-export async function uploadScreenshotToR2(
+export async function uploadBufferToR2(
   key: string,
   body: Buffer,
   contentType = "image/png",
@@ -137,6 +137,18 @@ export async function uploadScreenshotToR2(
     return `${publicBase}/${key}`;
   }
   return `/api/media/r2/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+/** Backwards-compatible screenshot helper. */
+export const uploadScreenshotToR2 = uploadBufferToR2;
+
+export async function deleteR2Object(key: string): Promise<void> {
+  if (!isR2Configured() || !key || key.includes("..")) return;
+  try {
+    await client().send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
+  } catch (err) {
+    console.error("[r2] delete failed", key, awsErrorMessage(err));
+  }
 }
 
 export async function getR2Object(

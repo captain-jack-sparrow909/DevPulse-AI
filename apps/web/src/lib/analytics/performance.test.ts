@@ -31,6 +31,8 @@ function record(
       contentType: "project_lesson",
       angle: "Real project lesson",
       format: "dual-thread",
+      mediaTypeX: "branded_visual",
+      mediaTypeLinkedIn: "carousel",
       postedManuallyAt: new Date("2026-07-15T12:00:00.000Z"),
       schedule: null,
       sources: [
@@ -107,6 +109,8 @@ test("report aggregates latest cumulative metrics and derives product groups", (
   assert.equal(report.byProject.find((group) => group.key === "intellitab")?.posts, 2);
   assert.equal(report.byProject.find((group) => group.key === "external")?.posts, 1);
   assert.ok(report.byPostingHour.some((group) => group.key === "16"));
+  assert.equal(report.byMediaType.find((group) => group.key === "branded_visual")?.posts, 2);
+  assert.equal(report.byMediaType.find((group) => group.key === "carousel")?.posts, 1);
   assert.ok(report.recommendations.length > 0);
 });
 

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { slugify } from "@/lib/utils";
 import { getContentStrategy, saveContentStrategy } from "@/lib/content/strategy-store";
 import type { ContentStrategyConfig } from "@/lib/content/strategy";
+import { DEFAULT_BRAND, getBrandSettings, safeHex } from "@/lib/visuals/brand";
 
 async function getUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -15,7 +16,7 @@ export async function GET() {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [settings, topics, styles, models, strategy] = await Promise.all([
+  const [settings, topics, styles, models, strategy, brand] = await Promise.all([
     prisma.userSettings.upsert({
       where: { userId: user.id },
       create: { userId: user.id },
@@ -25,9 +26,10 @@ export async function GET() {
     prisma.writingStyle.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } }),
     prisma.modelConfig.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } }),
     getContentStrategy(user.id),
+    getBrandSettings(user.id, user.name || "Builder"),
   ]);
 
-  return NextResponse.json({ settings, topics, styles, models, strategy });
+  return NextResponse.json({ settings, topics, styles, models, strategy, brand });
 }
 
 export async function PATCH(request: Request) {
@@ -59,6 +61,15 @@ export async function PATCH(request: Request) {
       isDefault?: boolean;
     };
     strategy?: Partial<ContentStrategyConfig>;
+    brand?: {
+      displayName?: string;
+      handle?: string;
+      tagline?: string;
+      accentColor?: string;
+      backgroundColor?: string;
+      textColor?: string;
+      footerText?: string;
+    };
   };
 
   if (body.settings) {
@@ -71,6 +82,22 @@ export async function PATCH(request: Request) {
 
   if (body.strategy) {
     await saveContentStrategy(user.id, body.strategy);
+  }
+
+  if (body.brand) {
+    const current = await getBrandSettings(user.id, user.name || "Builder");
+    await prisma.brandSettings.update({
+      where: { userId: user.id },
+      data: {
+        displayName: body.brand.displayName?.trim().slice(0, 80) || current.displayName,
+        handle: body.brand.handle?.trim().slice(0, 50) ?? current.handle,
+        tagline: body.brand.tagline?.trim().slice(0, 120) || current.tagline,
+        accentColor: safeHex(body.brand.accentColor, DEFAULT_BRAND.accentColor),
+        backgroundColor: safeHex(body.brand.backgroundColor, DEFAULT_BRAND.backgroundColor),
+        textColor: safeHex(body.brand.textColor, DEFAULT_BRAND.textColor),
+        footerText: body.brand.footerText?.trim().slice(0, 120) || current.footerText,
+      },
+    });
   }
 
   if (body.topic) {

@@ -87,6 +87,8 @@ export default async function AnalyticsPage() {
             contentType: true,
             angle: true,
             format: true,
+            mediaTypeX: true,
+            mediaTypeLinkedIn: true,
             postedManuallyAt: true,
             schedule: { select: { scheduledFor: true } },
             sources: {
@@ -184,6 +186,7 @@ export default async function AnalyticsPage() {
         <BreakdownTable title="By content type" description="Which editorial lane earns interaction and follower growth." rows={report.byContentType} />
         <BreakdownTable title="By product" description="Owned-project fact cards versus external discoveries." rows={report.byProject} />
         <BreakdownTable title="By posting hour" description={`Observed results in ${settings?.timezone || "Asia/Dubai"}.`} rows={report.byPostingHour} hour />
+        <BreakdownTable title="By media type" description="Text-only posts versus branded cards, screenshots, and carousels." rows={report.byMediaType} />
       </div>
 
       <Card>

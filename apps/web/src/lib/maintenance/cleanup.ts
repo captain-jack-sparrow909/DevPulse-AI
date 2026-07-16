@@ -2,6 +2,7 @@ import { readdir, stat, unlink } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/db";
 import { deleteOldR2Screenshots, isR2Configured } from "@/lib/storage/r2";
+import { deleteVisualFile } from "@/lib/visuals/storage";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const POST_RETENTION_DAYS = 30;
@@ -13,6 +14,7 @@ export interface CleanupResult {
   researchRunsDeleted: number;
   generationJobsDeleted: number;
   screenshotsDeleted: number;
+  visualAssetsDeleted: number;
   logs: string[];
 }
 
@@ -33,7 +35,25 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
 
   log(`Retention: posts/sources older than ${POST_RETENTION_DAYS}d; screenshots older than ${SCREENSHOT_RETENTION_DAYS}d`);
 
-  // Posts older than 30 days (cascades schedules, readiness jobs, post sources)
+  // Delete generated files before their database rows cascade with old posts.
+  const oldVisualAssets = await prisma.postVisualAsset.findMany({
+    where: { post: { createdAt: { lt: postCutoff } } },
+    select: {
+      storageKey: true,
+      filePath: true,
+      previewStorageKey: true,
+      previewPath: true,
+    },
+  });
+  for (const asset of oldVisualAssets) {
+    await deleteVisualFile(asset.storageKey, asset.filePath);
+    if (asset.previewStorageKey !== asset.storageKey) {
+      await deleteVisualFile(asset.previewStorageKey, asset.previewPath);
+    }
+  }
+  log(`Deleted ${oldVisualAssets.length} generated visual asset file set(s)`);
+
+  // Posts older than 30 days (cascades schedules, readiness jobs, post sources, visual rows)
   const oldPosts = await prisma.post.deleteMany({
     where: { createdAt: { lt: postCutoff } },
   });
@@ -85,6 +105,7 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     researchRunsDeleted: oldRuns.count,
     generationJobsDeleted: oldJobs.count,
     screenshotsDeleted,
+    visualAssetsDeleted: oldVisualAssets.length,
     logs,
   };
 }

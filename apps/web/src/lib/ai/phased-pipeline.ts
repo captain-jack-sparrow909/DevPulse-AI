@@ -59,6 +59,7 @@ import { upsertResearchSources } from "@/lib/research/source-store";
 import { filterSourcesForContentType } from "@/lib/research/source-policy";
 import {
   buildGenerationSnapshot,
+  recommendedMediaTypeForContent,
   resolveGenerationLearning,
 } from "@/lib/experiments/service";
 
@@ -565,6 +566,7 @@ async function runWritePhase(
     const baseEngagementBrief = engagementBriefForSlot(slotIndex, contentType);
     const learning = await resolveGenerationLearning(userId, slotIndex, baseEngagementBrief);
     const engagementBrief = learning.brief;
+    const recommendedMediaByPlatform = recommendedMediaTypeForContent(contentType, learning);
     if (learning.experiment) {
       log(
         logs,
@@ -668,6 +670,12 @@ async function runWritePhase(
           contentType: contentType.type,
           hook: draft.hook,
           experimentVariantId: learning.experimentVariantId,
+          recommendedMediaType:
+            recommendedMediaByPlatform.x === recommendedMediaByPlatform.linkedin
+              ? recommendedMediaByPlatform.x
+              : "mixed",
+          recommendedMediaTypeX: recommendedMediaByPlatform.x,
+          recommendedMediaTypeLinkedIn: recommendedMediaByPlatform.linkedin,
           generationSnapshotJson: buildGenerationSnapshot({
             slotIndex,
             scheduledFor,
@@ -676,6 +684,7 @@ async function runWritePhase(
             strategy,
             source,
             learning,
+            recommendedMediaByPlatform,
           }),
           needsImage: false,
           imageSkipReason: "Screenshot deferred — use Recapture on the post page",

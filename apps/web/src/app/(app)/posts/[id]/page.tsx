@@ -12,6 +12,9 @@ import { format } from "date-fns";
 import { promoteDuePosts } from "@/lib/schedule/promote-ready";
 import { resolveDualContent } from "@/lib/content/platforms";
 import { PerformanceForm } from "@/components/performance-form";
+import { VisualStudio } from "@/components/visual-studio";
+import { buildVisualBrief } from "@/lib/visuals/brief";
+import { parseVariantConfig } from "@/lib/experiments/definitions";
 
 export default async function PostDetailPage({
   params,
@@ -32,9 +35,19 @@ export default async function PostDetailPage({
       readinessJobs: true,
       performanceSnapshots: { orderBy: { capturedAt: "desc" } },
       experimentVariant: { include: { experiment: true } },
+      visualAssets: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!post) notFound();
+  const visualBrief = buildVisualBrief(post);
+  const mediaExperimentVariant = parseVariantConfig(
+    post.experimentVariant?.configJson,
+  ).mediaType;
+  const mediaExperimentPlatform = mediaExperimentVariant
+    ? post.experimentVariant?.experiment.platform === "linkedin"
+      ? "linkedin"
+      : "x"
+    : undefined;
 
   const citations = parseJsonArray<{ title: string; url: string; provider?: string }>(
     post.citationsJson,
@@ -263,6 +276,47 @@ export default async function PostDetailPage({
           </Card>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Visual content studio</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-zinc-500">
+            Generate a fact-grounded 4:5 technical card for X or LinkedIn, or a five-page PDF carousel for LinkedIn. Posting remains manual.
+          </p>
+          <VisualStudio
+            postId={post.id}
+            brief={{
+              title: visualBrief.title,
+              subtitle: visualBrief.subtitle,
+              bullets: visualBrief.bullets,
+              takeaway: visualBrief.takeaway,
+              altText: visualBrief.altText,
+            }}
+            recommendedMedia={{
+              x: post.recommendedMediaTypeX,
+              linkedin: post.recommendedMediaTypeLinkedIn,
+            }}
+            currentMedia={{ x: post.mediaTypeX, linkedin: post.mediaTypeLinkedIn }}
+            mediaExperimentVariant={mediaExperimentVariant}
+            mediaExperimentPlatform={mediaExperimentPlatform}
+            assets={post.visualAssets.map((asset) => ({
+              id: asset.id,
+              kind: asset.kind,
+              targetPlatform: asset.targetPlatform,
+              status: asset.status,
+              filePath: asset.filePath,
+              previewPath: asset.previewPath,
+              mimeType: asset.mimeType,
+              pageCount: asset.pageCount,
+              altText: asset.altText,
+              error: asset.error,
+              createdAt: asset.createdAt.toISOString(),
+            }))}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

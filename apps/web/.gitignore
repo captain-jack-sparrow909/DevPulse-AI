@@ -44,6 +44,8 @@ yarn-error.log*
 # Playwright screenshots (folder kept via .gitkeep)
 /public/screenshots/*
 !/public/screenshots/.gitkeep
+/public/generated/*
+!/public/generated/.gitkeep
 
 # Vercel
 .vercel

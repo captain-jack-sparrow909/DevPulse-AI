@@ -33,6 +33,8 @@ apps/web/prisma/*.db-journal
 # ── Playwright screenshots (keep directory via .gitkeep) ──
 apps/web/public/screenshots/*
 !apps/web/public/screenshots/.gitkeep
+apps/web/public/generated/*
+!apps/web/public/generated/.gitkeep
 
 # ── Logs & debug ──────────────────────────────────────────
 *.log

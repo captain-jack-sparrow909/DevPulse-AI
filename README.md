@@ -12,6 +12,7 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Engagement engine | [`docs/ENGAGEMENT-ENGINE.md`](./docs/ENGAGEMENT-ENGINE.md) |
 | Engagement feedback | [`docs/ENGAGEMENT-FEEDBACK.md`](./docs/ENGAGEMENT-FEEDBACK.md) |
 | Adaptive growth | [`docs/ADAPTIVE-GROWTH.md`](./docs/ADAPTIVE-GROWTH.md) |
+| Visual content | [`docs/VISUAL-CONTENT.md`](./docs/VISUAL-CONTENT.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -27,6 +28,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 5. Optionally **screenshots** the source page with Playwright when an image helps engagement
 6. Leaves you a **ready pack**: copy text → attach image → post yourself → mark as posted
 7. Runs controlled X/LinkedIn experiments and applies a winning pattern only after your approval
+8. Renders grounded branded PNG cards and LinkedIn carousel PDFs for manual attachment
 
 ---
 
@@ -232,6 +234,7 @@ DevPulse AI/
 | 3 | Done | Platform-native dual packs, grounding audits, quality scoring and rewrite loops |
 | 4 | Done | Performance snapshots, analytics and manual engagement opportunities |
 | 5 | Done | Generation snapshots, controlled experiments, CSV import and approval-gated learning |
+| 6 | Done | Visual brand settings, grounded technical cards, carousels and media experiments |
 
 ---
 

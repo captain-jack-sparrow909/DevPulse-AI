@@ -23,6 +23,14 @@ import type { RawSourceItem } from "@/lib/integrations/types";
 export interface GenerationLearning {
   brief: EngagementBrief;
   experimentVariantId: string | null;
+  recommendedMediaByPlatform: Record<
+    ExperimentPlatform,
+    "text_only" | "branded_visual" | "carousel"
+  >;
+  mediaPreferenceSourceByPlatform: Record<
+    ExperimentPlatform,
+    "default" | "recommendation" | "experiment"
+  >;
   experiment: {
     id: string;
     name: string;
@@ -72,12 +80,24 @@ export async function resolveGenerationLearning(
   const seen = new Set<string>();
   const appliedRecommendations: GenerationLearning["appliedRecommendations"] = [];
   const overrides: PlatformBriefOverride[] = [];
+  const recommendedMediaByPlatform: GenerationLearning["recommendedMediaByPlatform"] = {
+    x: "branded_visual",
+    linkedin: "branded_visual",
+  };
+  const mediaPreferenceSourceByPlatform: GenerationLearning["mediaPreferenceSourceByPlatform"] = {
+    x: "default",
+    linkedin: "default",
+  };
   for (const recommendation of recommendations) {
     const recommendationPlatform = platform(recommendation.platform);
     const key = `${recommendationPlatform}:${recommendation.dimension}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const config = parseVariantConfig(recommendation.proposedConfigJson);
+    if (config.mediaType) {
+      recommendedMediaByPlatform[recommendationPlatform] = config.mediaType;
+      mediaPreferenceSourceByPlatform[recommendationPlatform] = "recommendation";
+    }
     appliedRecommendations.push({
       id: recommendation.id,
       platform: recommendationPlatform,
@@ -100,6 +120,10 @@ export async function resolveGenerationLearning(
     if (variant) {
       const config = parseVariantConfig(variant.configJson);
       const experimentPlatform = platform(activeExperiment.platform);
+      if (config.mediaType) {
+        recommendedMediaByPlatform[experimentPlatform] = config.mediaType;
+        mediaPreferenceSourceByPlatform[experimentPlatform] = "experiment";
+      }
       overrides.push({ platform: experimentPlatform, config });
       experimentVariantId = variant.id;
       experiment = {
@@ -116,6 +140,8 @@ export async function resolveGenerationLearning(
   return {
     brief: applyBriefOverrides(baseBrief, overrides),
     experimentVariantId,
+    recommendedMediaByPlatform,
+    mediaPreferenceSourceByPlatform,
     experiment,
     appliedRecommendations,
   };
@@ -129,6 +155,7 @@ export function buildGenerationSnapshot(input: {
   strategy: ContentStrategyConfig;
   source: RawSourceItem;
   learning: GenerationLearning;
+  recommendedMediaByPlatform?: GenerationLearning["recommendedMediaByPlatform"];
 }): string {
   return JSON.stringify({
     version: 1,
@@ -148,8 +175,25 @@ export function buildGenerationSnapshot(input: {
       title: input.source.title,
     },
     experiment: input.learning.experiment,
+    recommendedMediaByPlatform:
+      input.recommendedMediaByPlatform ?? input.learning.recommendedMediaByPlatform,
     appliedRecommendationIds: input.learning.appliedRecommendations.map((row) => row.id),
   });
+}
+
+export function recommendedMediaTypeForContent(
+  contentType: ContentMixItem,
+  learning: GenerationLearning,
+): GenerationLearning["recommendedMediaByPlatform"] {
+  const recommended = { ...learning.recommendedMediaByPlatform };
+  if (learning.mediaPreferenceSourceByPlatform.x === "default") {
+    recommended.x = "branded_visual";
+  }
+  if (learning.mediaPreferenceSourceByPlatform.linkedin === "default") {
+    recommended.linkedin =
+      contentType.type === "architecture_breakdown" ? "carousel" : "branded_visual";
+  }
+  return recommended;
 }
 
 type StoredExperiment = Awaited<ReturnType<typeof loadExperiment>>;
@@ -165,6 +209,8 @@ async function loadExperiment(userId: string, experimentId: string) {
             where: { experimentEligible: true },
             select: {
               id: true,
+              mediaTypeX: true,
+              mediaTypeLinkedIn: true,
               performanceSnapshots: {
                 orderBy: { capturedAt: "desc" },
               },
@@ -181,20 +227,30 @@ async function loadExperiment(userId: string, experimentId: string) {
 }
 
 function toAnalysis(experiment: NonNullable<StoredExperiment>): ExperimentResult {
-  const variants: ExperimentVariantInput[] = experiment.variants.map((variant) => ({
-    id: variant.id,
-    key: variant.key,
-    label: variant.label,
-    configJson: variant.configJson,
-    assignedPosts: variant.posts.length,
-    performance: variant.posts.flatMap((post) =>
-      post.performanceSnapshots.map((snapshot) => ({
-        ...snapshot,
-        postId: post.id,
-        platform: platform(snapshot.platform),
-      } satisfies ExperimentPerformanceInput)),
-    ),
-  }));
+  const variants: ExperimentVariantInput[] = experiment.variants.map((variant) => {
+    const expectedMedia = parseVariantConfig(variant.configJson).mediaType;
+    const compliantPosts = expectedMedia
+      ? variant.posts.filter((post) =>
+          experiment.platform === "linkedin"
+            ? post.mediaTypeLinkedIn === expectedMedia
+            : post.mediaTypeX === expectedMedia,
+        )
+      : variant.posts;
+    return {
+      id: variant.id,
+      key: variant.key,
+      label: variant.label,
+      configJson: variant.configJson,
+      assignedPosts: variant.posts.length,
+      performance: compliantPosts.flatMap((post) =>
+        post.performanceSnapshots.map((snapshot) => ({
+          ...snapshot,
+          postId: post.id,
+          platform: platform(snapshot.platform),
+        } satisfies ExperimentPerformanceInput)),
+      ),
+    };
+  });
   return analyzeExperiment({
     variants,
     metric: metric(experiment.primaryMetric),

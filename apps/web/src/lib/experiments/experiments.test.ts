@@ -3,7 +3,11 @@ import test from "node:test";
 import { engagementBriefForSlot } from "@/lib/content/engagement";
 import { DEFAULT_CONTENT_STRATEGY, contentTypeForSlot } from "@/lib/content/strategy";
 import { analyzeExperiment, type ExperimentVariantInput } from "@/lib/experiments/analysis";
-import { applyBriefOverrides, chooseBalancedVariant } from "@/lib/experiments/definitions";
+import {
+  applyBriefOverrides,
+  chooseBalancedVariant,
+  EXPERIMENT_DIMENSIONS,
+} from "@/lib/experiments/definitions";
 
 test("balanced assignment chooses a least-used variant", () => {
   const selected = chooseBalancedVariant(
@@ -27,6 +31,14 @@ test("platform overrides do not overwrite the base brief", () => {
   assert.equal(result.hookPattern, base.hookPattern);
   assert.equal(result.platformOverrides?.x?.hookPattern, "technical-tension");
   assert.equal(result.platformOverrides?.linkedin?.endingPattern, "practical-takeaway");
+});
+
+test("media experiments are available independently on X and LinkedIn", () => {
+  assert.deepEqual(EXPERIMENT_DIMENSIONS.media_type.platforms, ["x", "linkedin"]);
+  assert.deepEqual(
+    EXPERIMENT_DIMENSIONS.media_type.variants.map((variant) => variant.config.mediaType),
+    ["text_only", "branded_visual"],
+  );
 });
 
 function variant(id: string, rates: number[]): ExperimentVariantInput {
@@ -76,4 +88,3 @@ test("experiment recommends a material winner after comparable samples", () => {
   assert.equal(result.winner?.id, "b");
   assert.equal(result.winner?.metricValue, 6);
 });
-

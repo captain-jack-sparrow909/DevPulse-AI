@@ -34,6 +34,8 @@ model User {
   engagementOpportunities EngagementOpportunity[]
   growthExperiments       GrowthExperiment[]
   strategyRecommendations StrategyRecommendation[]
+  brandSettings           BrandSettings?
+  visualAssets            PostVisualAsset[]
 }
 
 model Session {
@@ -186,60 +188,110 @@ model ResearchRun {
 }
 
 model Post {
-  id                     String                      @id @default(cuid())
-  userId                 String
-  user                   User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  platform               String                      @default("both") // both | x | linkedin (legacy single-platform)
-  format                 String                      @default("dual") // dual | single | thread | longform | tip | comparison
-  title                  String?
-  content                String // primary body (LinkedIn long-form for dual posts)
-  contentLinkedIn        String? // explicit LinkedIn copy (falls back to content)
-  threadJson             String? // JSON string[] — X thread, each item ≤280 chars
-  status                 String                      @default("draft") // draft | pending_review | approved | scheduled | ready | posted_manually | skipped | rejected | failed
-  contentHash            String
-  topicId                String?
-  topic                  Topic?                      @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  writingStyleId         String?
-  writingStyle           WritingStyle?               @relation(fields: [writingStyleId], references: [id], onDelete: SetNull)
-  researchRunId          String?
-  researchRun            ResearchRun?                @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
-  angle                  String?
-  contentType            String? // project_lesson | architecture_breakdown | evidence_opinion | experiment_benchmark | curated_discovery
-  hook                   String?
+  id                           String                      @id @default(cuid())
+  userId                       String
+  user                         User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform                     String                      @default("both") // both | x | linkedin (legacy single-platform)
+  format                       String                      @default("dual") // dual | single | thread | longform | tip | comparison
+  title                        String?
+  content                      String // primary body (LinkedIn long-form for dual posts)
+  contentLinkedIn              String? // explicit LinkedIn copy (falls back to content)
+  threadJson                   String? // JSON string[] — X thread, each item ≤280 chars
+  status                       String                      @default("draft") // draft | pending_review | approved | scheduled | ready | posted_manually | skipped | rejected | failed
+  contentHash                  String
+  topicId                      String?
+  topic                        Topic?                      @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  writingStyleId               String?
+  writingStyle                 WritingStyle?               @relation(fields: [writingStyleId], references: [id], onDelete: SetNull)
+  researchRunId                String?
+  researchRun                  ResearchRun?                @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+  angle                        String?
+  contentType                  String? // project_lesson | architecture_breakdown | evidence_opinion | experiment_benchmark | curated_discovery
+  hook                         String?
   // Optional screenshot for manual attach when posting on X/LinkedIn
-  needsImage             Boolean                     @default(false)
-  imagePath              String? // public-relative path e.g. /screenshots/abc.png
-  imageSourceUrl         String? // page that was captured
-  imageCaption           String?
-  imageSkipReason        String? // why no image was attached
+  needsImage                   Boolean                     @default(false)
+  imagePath                    String? // public-relative path e.g. /screenshots/abc.png
+  imageSourceUrl               String? // page that was captured
+  imageCaption                 String?
+  imageSkipReason              String? // why no image was attached
   // Quality scores 0-10
-  scoreNovelty           Float?
-  scoreAccuracy          Float?
-  scoreHook              Float?
-  scoreReadability       Float?
-  scoreVirality          Float?
-  scoreTechnical         Float?
-  scoreEngagement        Float?
-  scoreOverall           Float?
-  citationsJson          String? // JSON array of {title,url}
-  rejectionReason        String?
-  postedManuallyAt       DateTime?
-  createdAt              DateTime                    @default(now())
-  updatedAt              DateTime                    @updatedAt
-  sources                PostSource[]
-  schedule               Schedule?
-  readinessJobs          ReadinessJob[]
-  performanceSnapshots   SocialPerformanceSnapshot[]
-  experimentVariantId    String?
-  experimentVariant      GrowthExperimentVariant?    @relation(fields: [experimentVariantId], references: [id], onDelete: SetNull)
-  experimentEligible     Boolean                     @default(true)
-  generationSnapshotJson String? // immutable Phase 5 strategy/brief/source snapshot used to generate this post
+  scoreNovelty                 Float?
+  scoreAccuracy                Float?
+  scoreHook                    Float?
+  scoreReadability             Float?
+  scoreVirality                Float?
+  scoreTechnical               Float?
+  scoreEngagement              Float?
+  scoreOverall                 Float?
+  citationsJson                String? // JSON array of {title,url}
+  rejectionReason              String?
+  postedManuallyAt             DateTime?
+  createdAt                    DateTime                    @default(now())
+  updatedAt                    DateTime                    @updatedAt
+  sources                      PostSource[]
+  schedule                     Schedule?
+  readinessJobs                ReadinessJob[]
+  performanceSnapshots         SocialPerformanceSnapshot[]
+  experimentVariantId          String?
+  experimentVariant            GrowthExperimentVariant?    @relation(fields: [experimentVariantId], references: [id], onDelete: SetNull)
+  experimentEligible           Boolean                     @default(true)
+  generationSnapshotJson       String? // immutable Phase 5 strategy/brief/source snapshot used to generate this post
+  recommendedMediaType         String                      @default("branded_visual") // text_only | branded_visual | carousel
+  mediaType                    String                      @default("text_only") // actual manually published asset type
+  recommendedMediaTypeX        String                      @default("branded_visual")
+  recommendedMediaTypeLinkedIn String                      @default("branded_visual")
+  mediaTypeX                   String                      @default("text_only")
+  mediaTypeLinkedIn            String                      @default("text_only")
+  visualAssets                 PostVisualAsset[]
 
   @@index([userId, status])
   @@index([userId, createdAt])
   @@index([contentHash])
   @@index([platform])
   @@index([experimentVariantId])
+}
+
+model BrandSettings {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName     String
+  handle          String   @default("")
+  tagline         String   @default("Building AI developer tools in public")
+  accentColor     String   @default("#22d3ee")
+  backgroundColor String   @default("#07111f")
+  textColor       String   @default("#f8fafc")
+  footerText      String   @default("Local AI · LLM Systems · Product Engineering")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model PostVisualAsset {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId            String
+  post              Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  kind              String // portrait_card | linkedin_carousel
+  targetPlatform    String   @default("both") // both | x | linkedin
+  template          String   @default("technical_grid")
+  status            String   @default("rendering") // rendering | completed | failed
+  briefJson         String
+  filePath          String?
+  storageKey        String?
+  previewPath       String?
+  previewStorageKey String?
+  mimeType          String?
+  width             Int      @default(1200)
+  height            Int      @default(1500)
+  pageCount         Int      @default(1)
+  altText           String?
+  error             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([postId, status])
 }
 
 /// A controlled content experiment. A post is assigned to exactly one variant

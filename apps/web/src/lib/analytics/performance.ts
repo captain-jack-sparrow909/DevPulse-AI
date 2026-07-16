@@ -18,6 +18,8 @@ export interface PerformanceRecord {
     contentType: string | null;
     angle: string | null;
     format: string;
+    mediaTypeX?: string | null;
+    mediaTypeLinkedIn?: string | null;
     postedManuallyAt: Date | null;
     schedule: { scheduledFor: Date } | null;
     sources: Array<{
@@ -56,6 +58,7 @@ export interface PerformanceReport {
   byContentType: PerformanceBreakdown[];
   byProject: PerformanceBreakdown[];
   byPostingHour: PerformanceBreakdown[];
+  byMediaType: PerformanceBreakdown[];
   recommendations: string[];
   latestRecords: PerformanceRecord[];
 }
@@ -273,12 +276,20 @@ export function buildPerformanceReport(
   const byPostingHour = breakdown(latestRecords, (record) =>
     postingHour(record, timezone),
   );
+  const byMediaType = breakdown(
+    latestRecords,
+    (record) =>
+      (record.platform === "linkedin"
+        ? record.post.mediaTypeLinkedIn
+        : record.post.mediaTypeX) || "text_only",
+  );
   return {
     summary,
     byPlatform,
     byContentType,
     byProject,
     byPostingHour,
+    byMediaType,
     recommendations: recommendations(
       summary,
       byContentType,
