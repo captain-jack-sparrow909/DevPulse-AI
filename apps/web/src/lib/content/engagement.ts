@@ -22,6 +22,17 @@ export interface EngagementBrief {
   endingPattern: EndingPattern;
   xFormat: "single-insight" | "mini-thread" | "code-or-architecture";
   linkedInStructure: string;
+  platformOverrides?: {
+    x?: {
+      hookPattern?: HookPattern;
+      endingPattern?: EndingPattern;
+      xFormat?: EngagementBrief["xFormat"];
+    };
+    linkedin?: {
+      hookPattern?: HookPattern;
+      endingPattern?: EndingPattern;
+    };
+  };
 }
 
 export interface DraftAudit {
@@ -256,21 +267,27 @@ export function engagementBriefForSlot(
 }
 
 export function buildEngagementPrompt(brief: EngagementBrief): string {
-  const ending = {
+  const endingInstruction = (pattern: EndingPattern) => ({
     "targeted-question":
       "End with one specific question about the engineering tradeoff. Never use 'Thoughts?' or 'What do you think?',",
     "tradeoff-invitation":
       "Close by inviting engineers to compare one named tradeoff or implementation choice; do not ask a generic engagement question.",
     "practical-takeaway":
       "Close with a concise action or diagnostic the reader can apply. Do not force a question.",
-  }[brief.endingPattern];
+  })[pattern];
+  const linkedInHook = brief.platformOverrides?.linkedin?.hookPattern ?? brief.hookPattern;
+  const xHook = brief.platformOverrides?.x?.hookPattern ?? brief.hookPattern;
+  const linkedInEnding = brief.platformOverrides?.linkedin?.endingPattern ?? brief.endingPattern;
+  const xEnding = brief.platformOverrides?.x?.endingPattern ?? brief.endingPattern;
+  const xFormat = brief.platformOverrides?.x?.xFormat ?? brief.xFormat;
 
   return `Engagement playbook for this slot:
-- Hook pattern: ${brief.hookPattern}. The first line must expose a real constraint, decision, result, or surprising implication in under 140 characters.
+- LinkedIn hook pattern: ${linkedInHook}. X hook pattern: ${xHook}. Each first line must expose a real constraint, decision, result, or surprising implication in under 140 characters.
 - LinkedIn structure: ${brief.linkedInStructure}.
 - LinkedIn should be 450–1,400 characters, use short paragraphs, and put a concrete technical detail within the first three lines.
-- ${ending}
-- X format: ${brief.xFormat}. Prefer one strong standalone post when the idea fits; use a 2–3 post thread only when each post advances the explanation.
+- LinkedIn close: ${endingInstruction(linkedInEnding)}
+- X close: ${endingInstruction(xEnding)}
+- X format: ${xFormat}. Prefer one strong standalone post when the idea fits; use a 2–3 post thread only when each post advances the explanation.
 - The first X post must stand alone. Never open with "Thread", a topic label, or a vague teaser.
 - Write X and LinkedIn independently for their platforms. Do not split or compress the LinkedIn copy into tweets.
 - Use zero hashtags by default and no more than one when genuinely useful. No engagement bait.

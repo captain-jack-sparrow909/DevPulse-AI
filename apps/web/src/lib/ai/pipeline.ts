@@ -54,6 +54,10 @@ import {
   type EngagementBrief,
 } from "@/lib/content/engagement";
 import { sourceItemKey, upsertResearchSources } from "@/lib/research/source-store";
+import {
+  buildGenerationSnapshot,
+  resolveGenerationLearning,
+} from "@/lib/experiments/service";
 
 export interface PipelineOptions {
   userId: string;
@@ -754,7 +758,22 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     void platforms; // reserved for future per-platform toggles
     const angle = contentType.label || pickAngle(slotIndex);
     const strategyPrompt = buildStrategyPrompt(strategy, contentType);
-    const engagementBrief = engagementBriefForSlot(slotIndex, contentType);
+    const baseEngagementBrief = engagementBriefForSlot(slotIndex, contentType);
+    const learning = await resolveGenerationLearning(options.userId, slotIndex, baseEngagementBrief);
+    const engagementBrief = learning.brief;
+    if (learning.experiment) {
+      log(
+        logs,
+        `Experiment ${learning.experiment.name}: ${learning.experiment.variantLabel} for ${learning.experiment.platform.toUpperCase()}`,
+        options.onLog,
+      );
+    } else if (learning.appliedRecommendations.length) {
+      log(
+        logs,
+        `Applied ${learning.appliedRecommendations.length} approved growth preference(s)`,
+        options.onLog,
+      );
+    }
 
     let produced = 0;
     let lastError = "";
@@ -923,6 +942,16 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           angle,
           contentType: contentType.type,
           hook: draft.hook,
+          experimentVariantId: learning.experimentVariantId,
+          generationSnapshotJson: buildGenerationSnapshot({
+            slotIndex,
+            scheduledFor,
+            contentType,
+            brief: engagementBrief,
+            strategy,
+            source,
+            learning,
+          }),
           needsImage: imageDecision.needsImage,
           imagePath,
           imageSourceUrl,

@@ -384,28 +384,20 @@ tests/
 Ask Claude to implement in phases instead of trying to build everything at once.
 
 ```text
-Phase 1
-- Authentication
-- Dashboard
-- AI post generation
+Phase 1 — completed
+- Authentication, dashboard, slot generation, screenshots, and manual posting workflow
 
-Phase 2
-- Trend research
-- GitHub integration
-- RSS integration
+Phase 2 — completed
+- Product-first research, owned-project fact cards, GitHub/RSS and selective external evidence
 
-Phase 3
-- LangGraph agents
-- Quality scoring
+Phase 3 — completed
+- Platform-native X/LinkedIn generation, grounding audits, scoring, and rewrite loops
 
-Phase 4
-- Scheduler
-- X publishing
-- LinkedIn publishing
+Phase 4 — completed
+- Manual performance snapshots, analytics, and engagement opportunities
 
-Phase 5
-- Analytics
-- Team support
+Phase 5 — completed
+- Generation provenance, controlled growth experiments, bulk metrics, and approval-gated learning
 ```
 
 ## One additional recommendation
@@ -416,4 +408,3 @@ One feature that can make this stand out from typical AI post generators is to m
 2. Deduplicate and rank topics by relevance and novelty.
 3. Generate multiple content angles for each topic (tutorial, opinion, comparison, quick tip, thread, architecture breakdown).
 4. Learn from engagement data over time to improve future recommendations.
-

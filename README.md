@@ -11,6 +11,7 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Content strategy | [`docs/CONTENT-STRATEGY.md`](./docs/CONTENT-STRATEGY.md) |
 | Engagement engine | [`docs/ENGAGEMENT-ENGINE.md`](./docs/ENGAGEMENT-ENGINE.md) |
 | Engagement feedback | [`docs/ENGAGEMENT-FEEDBACK.md`](./docs/ENGAGEMENT-FEEDBACK.md) |
+| Adaptive growth | [`docs/ADAPTIVE-GROWTH.md`](./docs/ADAPTIVE-GROWTH.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -25,6 +26,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 4. **Scores** quality and rewrites weak drafts
 5. Optionally **screenshots** the source page with Playwright when an image helps engagement
 6. Leaves you a **ready pack**: copy text → attach image → post yourself → mark as posted
+7. Runs controlled X/LinkedIn experiments and applies a winning pattern only after your approval
 
 ---
 
@@ -145,6 +147,9 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/posts` | History, search, filters |
 | `/posts/[id]` | Edit, approve, copy, screenshot, mark posted |
 | `/research` | Ingested sources |
+| `/analytics` | Actual performance, recommendations, and bulk CSV metric import |
+| `/experiments` | Controlled hook, ending, and X-format tests with approval-gated learning |
+| `/engagement` | Manual conversation opportunities and locally saved reply drafts |
 | `/schedule` | Slot timeline |
 | `/settings` | Topics, writing style, cadence, timezone, models |
 | `/api/cron/slot` | Cron: one due-slot generation per user |
@@ -223,10 +228,10 @@ DevPulse AI/
 | Phase | Status | Focus |
 |-------|--------|--------|
 | 1 | Done | Auth, dashboard, research, slot pipeline, screenshots, manual post UX |
-| 2 | Planned | More RSS / news / clustering |
-| 3 | Planned | LangGraph agent graph |
-| 4 | Planned | Manual posting UX polish (clipboard pack, notifications) |
-| 5 | Planned | Analytics feedback loop |
+| 2 | Done | Product-first source policy, owned-project facts, focused research lanes |
+| 3 | Done | Platform-native dual packs, grounding audits, quality scoring and rewrite loops |
+| 4 | Done | Performance snapshots, analytics and manual engagement opportunities |
+| 5 | Done | Generation snapshots, controlled experiments, CSV import and approval-gated learning |
 
 ---
 

@@ -18,7 +18,8 @@ DevPulse is **research-first**:
 4. **Write → score → rewrite** until quality threshold (default 8.5/10).
 5. **Human approval** is a hard gate — no auto-publish.
 6. **Schedule** across 6am–9pm (12 slots).
-7. **Learn** from engagement over time (Phase 5).
+7. **Measure** real engagement without confusing generation scores with distribution (Phase 4).
+8. **Learn carefully** through controlled, approval-gated experiments (Phase 5).
 
 For a single user on free/cheap tiers, complexity must stay low: one deployable app, DB-backed jobs instead of Redis at first, free public APIs for research, DeepSeek for LLM, Supabase when ready.
 
@@ -107,7 +108,9 @@ Phase 1 implements this as a **typed sequential pipeline** with real free resear
 - **Post** — content for X or LinkedIn, scores, status
 - **Schedule** — planned publish time
 - **PublishingJob** — approval + publish attempt
-- **AnalyticsEvent** — engagement (Phase 5)
+- **SocialPerformanceSnapshot** — cumulative manual X/LinkedIn metrics (Phase 4)
+- **GrowthExperiment / GrowthExperimentVariant** — controlled assignments (Phase 5)
+- **StrategyRecommendation** — approval-gated learned preference (Phase 5)
 - **PromptVersion** — versioned prompts
 - **GenerationJob** — pipeline job status
 
@@ -149,18 +152,22 @@ When a post benefits from media (repos, papers, demos, many LinkedIn posts), Chr
 - Approval gate + schedule slots UI
 - Publish adapters stubbed (safe no-op without keys)
 
-### Phase 2 — Richer research
-- More RSS, Google News, Tavily, clustering improvements
+### Phase 2 — Product-first research
+- Owned-project fact cards and lane-specific external research
+- Narrow GitHub/RSS, arXiv/Hugging Face, and community-source policy
 
-### Phase 3 — LangGraph agents
-- Graph orchestration, parallel research, better rewrite loops
+### Phase 3 — Engagement-quality engine
+- Platform-native LinkedIn copy and X threads
+- Multiple candidates, grounding audits, hook deduplication, and quality gates
 
-### Phase 4 — Manual posting UX polish
-- Slot notifications, clipboard pack (text + image), mobile-friendly ready queue
-- Optional X **read-only** research via Bearer token (never write)
+### Phase 4 — Engagement feedback
+- Manual cumulative X/LinkedIn performance snapshots
+- Analytics breakdowns and product-relevant conversation opportunities
 
-### Phase 5 — Analytics loop
-- Engagement import (manual metrics or export CSV), ranking feedback
+### Phase 5 — Adaptive growth
+- Immutable generation snapshots and balanced controlled experiments
+- Bulk CSV performance import
+- Evidence-gated recommendations that require explicit approval
 
 ---
 

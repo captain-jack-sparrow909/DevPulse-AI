@@ -32,6 +32,8 @@ model User {
   contentStrategy         ContentStrategy?
   performanceSnapshots    SocialPerformanceSnapshot[]
   engagementOpportunities EngagementOpportunity[]
+  growthExperiments       GrowthExperiment[]
+  strategyRecommendations StrategyRecommendation[]
 }
 
 model Session {
@@ -184,55 +186,121 @@ model ResearchRun {
 }
 
 model Post {
-  id                   String                      @id @default(cuid())
-  userId               String
-  user                 User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  platform             String                      @default("both") // both | x | linkedin (legacy single-platform)
-  format               String                      @default("dual") // dual | single | thread | longform | tip | comparison
-  title                String?
-  content              String // primary body (LinkedIn long-form for dual posts)
-  contentLinkedIn      String? // explicit LinkedIn copy (falls back to content)
-  threadJson           String? // JSON string[] — X thread, each item ≤280 chars
-  status               String                      @default("draft") // draft | pending_review | approved | scheduled | ready | posted_manually | skipped | rejected | failed
-  contentHash          String
-  topicId              String?
-  topic                Topic?                      @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  writingStyleId       String?
-  writingStyle         WritingStyle?               @relation(fields: [writingStyleId], references: [id], onDelete: SetNull)
-  researchRunId        String?
-  researchRun          ResearchRun?                @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
-  angle                String?
-  contentType          String? // project_lesson | architecture_breakdown | evidence_opinion | experiment_benchmark | curated_discovery
-  hook                 String?
+  id                     String                      @id @default(cuid())
+  userId                 String
+  user                   User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform               String                      @default("both") // both | x | linkedin (legacy single-platform)
+  format                 String                      @default("dual") // dual | single | thread | longform | tip | comparison
+  title                  String?
+  content                String // primary body (LinkedIn long-form for dual posts)
+  contentLinkedIn        String? // explicit LinkedIn copy (falls back to content)
+  threadJson             String? // JSON string[] — X thread, each item ≤280 chars
+  status                 String                      @default("draft") // draft | pending_review | approved | scheduled | ready | posted_manually | skipped | rejected | failed
+  contentHash            String
+  topicId                String?
+  topic                  Topic?                      @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  writingStyleId         String?
+  writingStyle           WritingStyle?               @relation(fields: [writingStyleId], references: [id], onDelete: SetNull)
+  researchRunId          String?
+  researchRun            ResearchRun?                @relation(fields: [researchRunId], references: [id], onDelete: SetNull)
+  angle                  String?
+  contentType            String? // project_lesson | architecture_breakdown | evidence_opinion | experiment_benchmark | curated_discovery
+  hook                   String?
   // Optional screenshot for manual attach when posting on X/LinkedIn
-  needsImage           Boolean                     @default(false)
-  imagePath            String? // public-relative path e.g. /screenshots/abc.png
-  imageSourceUrl       String? // page that was captured
-  imageCaption         String?
-  imageSkipReason      String? // why no image was attached
+  needsImage             Boolean                     @default(false)
+  imagePath              String? // public-relative path e.g. /screenshots/abc.png
+  imageSourceUrl         String? // page that was captured
+  imageCaption           String?
+  imageSkipReason        String? // why no image was attached
   // Quality scores 0-10
-  scoreNovelty         Float?
-  scoreAccuracy        Float?
-  scoreHook            Float?
-  scoreReadability     Float?
-  scoreVirality        Float?
-  scoreTechnical       Float?
-  scoreEngagement      Float?
-  scoreOverall         Float?
-  citationsJson        String? // JSON array of {title,url}
-  rejectionReason      String?
-  postedManuallyAt     DateTime?
-  createdAt            DateTime                    @default(now())
-  updatedAt            DateTime                    @updatedAt
-  sources              PostSource[]
-  schedule             Schedule?
-  readinessJobs        ReadinessJob[]
-  performanceSnapshots SocialPerformanceSnapshot[]
+  scoreNovelty           Float?
+  scoreAccuracy          Float?
+  scoreHook              Float?
+  scoreReadability       Float?
+  scoreVirality          Float?
+  scoreTechnical         Float?
+  scoreEngagement        Float?
+  scoreOverall           Float?
+  citationsJson          String? // JSON array of {title,url}
+  rejectionReason        String?
+  postedManuallyAt       DateTime?
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  sources                PostSource[]
+  schedule               Schedule?
+  readinessJobs          ReadinessJob[]
+  performanceSnapshots   SocialPerformanceSnapshot[]
+  experimentVariantId    String?
+  experimentVariant      GrowthExperimentVariant?    @relation(fields: [experimentVariantId], references: [id], onDelete: SetNull)
+  experimentEligible     Boolean                     @default(true)
+  generationSnapshotJson String? // immutable Phase 5 strategy/brief/source snapshot used to generate this post
 
   @@index([userId, status])
   @@index([userId, createdAt])
   @@index([contentHash])
   @@index([platform])
+  @@index([experimentVariantId])
+}
+
+/// A controlled content experiment. A post is assigned to exactly one variant
+/// before writing so later performance can be attributed to the actual brief.
+model GrowthExperiment {
+  id                  String                    @id @default(cuid())
+  userId              String
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  hypothesis          String
+  platform            String                    @default("x") // x | linkedin
+  dimension           String // hook_pattern | ending_pattern | x_format
+  primaryMetric       String                    @default("engagement_rate")
+  minSamplePerVariant Int                       @default(3)
+  status              String                    @default("draft") // draft | active | paused | completed
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  variants            GrowthExperimentVariant[]
+  recommendations     StrategyRecommendation[]
+
+  @@index([userId, status, createdAt])
+}
+
+model GrowthExperimentVariant {
+  id                 String                   @id @default(cuid())
+  experimentId       String
+  experiment         GrowthExperiment         @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  key                String
+  label              String
+  configJson         String
+  createdAt          DateTime                 @default(now())
+  posts              Post[]
+  recommendationWins StrategyRecommendation[] @relation("WinningVariant")
+
+  @@unique([experimentId, key])
+  @@index([experimentId])
+}
+
+/// Evidence-backed change proposed by an experiment. Only `applied` rows are
+/// allowed to influence future generation; recommendations are never applied silently.
+model StrategyRecommendation {
+  id                 String                   @id @default(cuid())
+  userId             String
+  user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experimentId       String?
+  experiment         GrowthExperiment?        @relation(fields: [experimentId], references: [id], onDelete: SetNull)
+  winnerVariantId    String?
+  winnerVariant      GrowthExperimentVariant? @relation("WinningVariant", fields: [winnerVariantId], references: [id], onDelete: SetNull)
+  dimension          String
+  platform           String
+  status             String                   @default("pending") // pending | applied | rejected | superseded
+  proposedConfigJson String
+  evidenceJson       String
+  rationale          String
+  createdAt          DateTime                 @default(now())
+  decidedAt          DateTime?
+
+  @@index([userId, status, createdAt])
+  @@index([experimentId])
 }
 
 /// Manually recorded cumulative platform metrics. Multiple snapshots preserve change over time.

@@ -106,7 +106,7 @@ Each call:
 
 **Do not** set `CRON_SYNC=1` with a 30s client timeout.
 
-Phase 4 adds performance snapshots, engagement opportunities, and explicit post content types. Apply the current Prisma schema once before opening Analytics or Engagement:
+Phase 4 adds performance snapshots, engagement opportunities, and explicit post content types. Phase 5 adds growth experiments, strategy recommendations, experiment assignments, and generation snapshots. Apply the current Prisma schema once before opening Analytics, Engagement, or Experiments:
 
 ```bash
 cd apps/web

@@ -80,6 +80,9 @@ export async function PATCH(
         threadJson = JSON.stringify(parts.length ? parts : enforceXLimit([linkedIn]));
       }
     }
+    const experimentContentChanged =
+      linkedIn !== (post.contentLinkedIn ?? post.content).trim() ||
+      threadJson !== post.threadJson;
     const updated = await prisma.post.update({
       where: { id },
       data: {
@@ -90,6 +93,7 @@ export async function PATCH(
         platform: "both",
         format: (parseThreadJson(threadJson).length > 1 ? "dual-thread" : "dual") as string,
         status: body.status || post.status,
+        experimentEligible: experimentContentChanged ? false : post.experimentEligible,
       },
     });
     return NextResponse.json(updated);

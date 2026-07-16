@@ -31,6 +31,7 @@ export default async function PostDetailPage({
       sources: { include: { source: true } },
       readinessJobs: true,
       performanceSnapshots: { orderBy: { capturedAt: "desc" } },
+      experimentVariant: { include: { experiment: true } },
     },
   });
   if (!post) notFound();
@@ -49,6 +50,14 @@ export default async function PostDetailPage({
     ["Technical", post.scoreTechnical],
     ["Engagement", post.scoreEngagement],
   ] as const;
+  let generationSnapshot: Record<string, unknown> | null = null;
+  try {
+    generationSnapshot = post.generationSnapshotJson
+      ? (JSON.parse(post.generationSnapshotJson) as Record<string, unknown>)
+      : null;
+  } catch {
+    generationSnapshot = null;
+  }
 
   return (
     <div className="space-y-6">
@@ -67,6 +76,11 @@ export default async function PostDetailPage({
           {post.angle && (
             <Badge className="border-violet-400/20 bg-violet-400/10 text-violet-200">
               {post.angle}
+            </Badge>
+          )}
+          {post.experimentVariant && (
+            <Badge className="border-amber-400/20 bg-amber-400/10 text-amber-200">
+              Experiment: {post.experimentVariant.label}{post.experimentEligible ? "" : " · excluded after edit"}
             </Badge>
           )}
           {post.needsImage && (
@@ -198,6 +212,19 @@ export default async function PostDetailPage({
               )}
               {post.rejectionReason && (
                 <div className="text-rose-400">Rejected: {post.rejectionReason}</div>
+              )}
+              {post.experimentVariant && (
+                <div>
+                  Experiment:{" "}
+                  <Link href="/experiments" className="text-amber-300 hover:underline">
+                    {post.experimentVariant.experiment.name} · {post.experimentVariant.label}
+                  </Link>
+                </div>
+              )}
+              {generationSnapshot && (
+                <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2 text-xs leading-relaxed text-zinc-500">
+                  Generation snapshot v{String(generationSnapshot.version ?? 1)} · {String(generationSnapshot.contentType ?? "unknown")} · {String(generationSnapshot.xFormat ?? "default X format")}
+                </div>
               )}
             </CardContent>
           </Card>

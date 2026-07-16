@@ -16,6 +16,7 @@ import {
   X,
   BarChart3,
   MessageCircleMore,
+  FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -28,6 +29,7 @@ const nav = [
   { href: "/generate", label: "Generate", icon: Sparkles },
   { href: "/research", label: "Research", icon: Radar },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/experiments", label: "Experiments", icon: FlaskConical },
   { href: "/engagement", label: "Engagement", icon: MessageCircleMore },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/settings", label: "Settings", icon: Settings },

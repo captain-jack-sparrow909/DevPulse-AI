@@ -10,6 +10,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { BulkPerformanceImport } from "@/components/bulk-performance-import";
 
 function BreakdownTable({
   title,
@@ -73,7 +74,7 @@ function BreakdownTable({
 export default async function AnalyticsPage() {
   const session = await requireUser();
   const userId = session.user.id;
-  const [snapshots, settings] = await Promise.all([
+  const [snapshots, settings, recentPosted] = await Promise.all([
     prisma.socialPerformanceSnapshot.findMany({
       where: { userId },
       orderBy: { capturedAt: "desc" },
@@ -100,6 +101,12 @@ export default async function AnalyticsPage() {
       },
     }),
     prisma.userSettings.findUnique({ where: { userId } }),
+    prisma.post.findMany({
+      where: { userId, status: "posted_manually" },
+      orderBy: { postedManuallyAt: "desc" },
+      take: 20,
+      select: { id: true, title: true, hook: true },
+    }),
   ]);
   const records = snapshots
     .filter((snapshot) => snapshot.platform === "x" || snapshot.platform === "linkedin")
@@ -152,6 +159,23 @@ export default async function AnalyticsPage() {
               <p>{recommendation}</p>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Bulk performance import</CardTitle>
+          <CardDescription>
+            Download a template prefilled with recent posted IDs, enter cumulative X and LinkedIn metrics, then import the CSV in one batch.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BulkPerformanceImport
+            posts={recentPosted.map((post) => ({
+              id: post.id,
+              title: post.title || post.hook || "Untitled post",
+            }))}
+          />
         </CardContent>
       </Card>
 

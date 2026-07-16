@@ -2,6 +2,8 @@
 
 Phase 4 measures what happens after manual publishing. Generation quality scores remain useful gates, but they are not treated as evidence of reach, engagement, or follower growth.
 
+Phase 5 uses these measurements in controlled experiments. See `docs/ADAPTIVE-GROWTH.md`; Phase 4 itself never changes generation strategy.
+
 ## Performance snapshots
 
 Open a post and record cumulative X or LinkedIn metrics. A snapshot stores:
@@ -55,4 +57,3 @@ npx prisma db push
 ```
 
 Use the Supabase session-pooler `DIRECT_URL` for schema operations, as described in the deployment guide.
-

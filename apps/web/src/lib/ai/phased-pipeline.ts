@@ -57,6 +57,10 @@ import {
 } from "@/lib/content/engagement";
 import { upsertResearchSources } from "@/lib/research/source-store";
 import { filterSourcesForContentType } from "@/lib/research/source-policy";
+import {
+  buildGenerationSnapshot,
+  resolveGenerationLearning,
+} from "@/lib/experiments/service";
 
 export interface PhaseResult {
   jobId: string | null;
@@ -558,7 +562,17 @@ async function runWritePhase(
     const threshold = settings.qualityThreshold;
     const angle = contentType.label || ANGLES[slotIndex % ANGLES.length]!;
     const strategyPrompt = buildStrategyPrompt(strategy, contentType);
-    const engagementBrief = engagementBriefForSlot(slotIndex, contentType);
+    const baseEngagementBrief = engagementBriefForSlot(slotIndex, contentType);
+    const learning = await resolveGenerationLearning(userId, slotIndex, baseEngagementBrief);
+    const engagementBrief = learning.brief;
+    if (learning.experiment) {
+      log(
+        logs,
+        `Experiment ${learning.experiment.name}: ${learning.experiment.variantLabel} for ${learning.experiment.platform.toUpperCase()}`,
+      );
+    } else if (learning.appliedRecommendations.length) {
+      log(logs, `Applied ${learning.appliedRecommendations.length} approved growth preference(s)`);
+    }
 
     let produced = 0;
     let lastError = "";
@@ -653,6 +667,16 @@ async function runWritePhase(
           angle,
           contentType: contentType.type,
           hook: draft.hook,
+          experimentVariantId: learning.experimentVariantId,
+          generationSnapshotJson: buildGenerationSnapshot({
+            slotIndex,
+            scheduledFor,
+            contentType,
+            brief: engagementBrief,
+            strategy,
+            source,
+            learning,
+          }),
           needsImage: false,
           imageSkipReason: "Screenshot deferred — use Recapture on the post page",
           scoreNovelty: scores.novelty,
