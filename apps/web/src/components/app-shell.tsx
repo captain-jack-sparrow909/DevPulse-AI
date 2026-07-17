@@ -24,6 +24,7 @@ import {
   ServerCog,
   TrendingUp,
   CalendarCheck2,
+  ListChecks,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -32,6 +33,7 @@ import { NavigationLoader } from "@/components/navigation-loader";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/publishing", label: "Publishing", icon: ListChecks },
   { href: "/posts", label: "Posts", icon: FileText },
   { href: "/generate", label: "Generate", icon: Sparkles },
   { href: "/research", label: "Research", icon: Radar },

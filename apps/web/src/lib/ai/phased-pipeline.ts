@@ -75,6 +75,12 @@ import {
   linkExecutionDirective,
   resolveExecutionDirective,
 } from "@/lib/execution-plan/service";
+import {
+  effectivePostsPerDay,
+  generationCooldownReason,
+  generationQualityGate,
+  projectKeyFromSource,
+} from "@/lib/publishing/adaptive";
 
 export interface PhaseResult {
   jobId: string | null;
@@ -167,7 +173,7 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
     settings.timezone,
     settings.firstPostHour,
     settings.lastPostHour,
-    settings.postsPerDay,
+    effectivePostsPerDay(settings),
   );
   const { start, end } = dayBoundsUtc(now, settings.timezone);
 
@@ -445,7 +451,7 @@ async function runWritePhase(
     settings.timezone,
     settings.firstPostHour,
     settings.lastPostHour,
-    settings.postsPerDay,
+    effectivePostsPerDay(settings),
   );
 
   const slotIndex = meta.slotIndex;
@@ -570,7 +576,16 @@ async function runWritePhase(
 
     const recentPosts = await prisma.post.findMany({
       where: { userId },
-      select: { contentHash: true, hook: true, content: true },
+      select: {
+        contentHash: true,
+        hook: true,
+        content: true,
+        contentType: true,
+        createdAt: true,
+        sources: {
+          select: { source: { select: { externalId: true, title: true } } },
+        },
+      },
       take: 500,
       orderBy: { createdAt: "desc" },
     });
@@ -611,6 +626,28 @@ async function runWritePhase(
     for (let attempt = 0; attempt < Math.min(5, ordered.length); attempt++) {
       const picked = ordered[attempt]!;
       const source = picked.item;
+      if (!executionDirective) {
+        const cooldown = generationCooldownReason({
+          sourceProjectKey: projectKeyFromSource(source.externalId, source.title),
+          contentType: contentType.type,
+          recentPosts: recentPosts.map((post) => ({
+            createdAt: post.createdAt,
+            contentType: post.contentType,
+            projectKeys: post.sources
+              .map(({ source: linkedSource }) =>
+                projectKeyFromSource(linkedSource.externalId, linkedSource.title),
+              )
+              .filter((key): key is string => Boolean(key)),
+          })),
+          now,
+          settings,
+        });
+        if (cooldown) {
+          lastError = `Cooldown: ${cooldown}`;
+          log(logs, `${lastError}, next source…`);
+          continue;
+        }
+      }
       const providerUses = usedProviderCounts.get(source.provider) ?? 0;
       if (
         source.provider !== "project" &&
@@ -651,7 +688,18 @@ async function runWritePhase(
 
       const scores = scoreDualDraft(draft, audit);
 
-      if ((audit.score < 5.8 || scores.overall < threshold - 3) && useAi) {
+      const adaptiveGate = generationQualityGate(scores, settings);
+      if (adaptiveGate.length > 0) {
+        lastError = `Adaptive quality gate: ${adaptiveGate.join("; ")}`;
+        log(logs, `Reject ${lastError}, next source…`);
+        continue;
+      }
+
+      if (
+        (audit.score < 5.8 ||
+          (!settings.adaptiveCadenceEnabled && scores.overall < threshold - 3)) &&
+        useAi
+      ) {
         lastError = `Low quality: engagement ${audit.score}, overall ${scores.overall}`;
         log(logs, `Reject ${lastError}, next source…`);
         continue;
@@ -755,6 +803,40 @@ async function runWritePhase(
     }
 
     if (produced === 0) {
+      if (settings.adaptiveCadenceEnabled) {
+        const reason = `Adaptive quality gate skipped this slot: ${lastError || "no candidate cleared the publishing bar"}`;
+        await skipSlot(userId, slotIndex, reason);
+        await Promise.all([
+          prisma.generationJob.update({
+            where: { id: jobId },
+            data: {
+              status: "completed",
+              producedCount: 0,
+              error: null,
+              completedAt: new Date(),
+            },
+          }),
+          prisma.researchRun.update({
+            where: { id: researchRunId },
+            data: { status: "completed", completedAt: new Date() },
+          }),
+        ]);
+        log(logs, reason);
+        await appendJobLogs(jobId, logs);
+        return {
+          jobId,
+          researchRunId,
+          postsCreated: 0,
+          sourcesFound: dbSources.length,
+          logs,
+          skipped: true,
+          skipReason: reason,
+          slotIndex,
+          scheduledFor: meta.scheduledFor,
+          continueChain: false,
+          phase: "completed",
+        };
+      }
       throw new Error(lastError || "Could not produce a post from gathered sources");
     }
 

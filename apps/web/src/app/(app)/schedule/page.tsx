@@ -5,18 +5,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import { effectivePostsPerDay } from "@/lib/publishing/adaptive";
 
 export default async function SchedulePage() {
   const session = await requireUser();
 
-  const schedules = await prisma.schedule.findMany({
-    where: { post: { userId: session.user.id } },
-    orderBy: { scheduledFor: "asc" },
-    include: {
-      post: true,
-    },
-    take: 50,
-  });
+  const [settings, schedules] = await Promise.all([
+    prisma.userSettings.upsert({
+      where: { userId: session.user.id },
+      create: { userId: session.user.id },
+      update: {},
+    }),
+    prisma.schedule.findMany({
+      where: { post: { userId: session.user.id } },
+      orderBy: { scheduledFor: "asc" },
+      include: { post: true },
+      take: 50,
+    }),
+  ]);
+  const dailySlots = effectivePostsPerDay(settings);
 
   return (
     <div className="space-y-6">
@@ -24,8 +31,7 @@ export default async function SchedulePage() {
         <div className="page-kicker mb-2">Calendar</div>
         <h1 className="page-title">Schedule</h1>
         <p className="page-subtitle">
-          12 daily slots from 6:00 to 21:00. When a slot is due, the post becomes ready for you to
-          post manually.
+          {dailySlots} adaptive draft slot{dailySlots === 1 ? "" : "s"} between {settings.firstPostHour}:00 and {settings.lastPostHour}:00. X and LinkedIn publishing recommendations are evaluated independently.
         </p>
       </div>
 
@@ -53,7 +59,7 @@ export default async function SchedulePage() {
                     {format(slot.scheduledFor, "MMM d · h:mm a")}
                   </span>
                   <Badge className="border-zinc-700 bg-zinc-800/50 text-zinc-400">
-                    slot {slot.slotIndex + 1}/12
+                    slot {slot.slotIndex + 1}/{dailySlots}
                   </Badge>
                   <Badge className="border-sky-400/20 bg-sky-400/10 text-sky-200">LinkedIn</Badge>
                   <Badge className="border-white/10 bg-white/[0.04] text-zinc-300">X</Badge>

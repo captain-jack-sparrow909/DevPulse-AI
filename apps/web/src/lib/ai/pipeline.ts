@@ -63,6 +63,12 @@ import {
   linkExecutionDirective,
   resolveExecutionDirective,
 } from "@/lib/execution-plan/service";
+import {
+  effectivePostsPerDay,
+  generationCooldownReason,
+  generationQualityGate,
+  projectKeyFromSource,
+} from "@/lib/publishing/adaptive";
 
 export interface PipelineOptions {
   userId: string;
@@ -321,7 +327,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     settings.timezone,
     settings.firstPostHour,
     settings.lastPostHour,
-    settings.postsPerDay,
+    effectivePostsPerDay(settings),
   );
 
   // Avoid overlapping cron workers for the same user (double posts / pool thrash)
@@ -654,7 +660,16 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       }),
       prisma.post.findMany({
         where: { userId: options.userId },
-        select: { contentHash: true, hook: true, content: true },
+        select: {
+          contentHash: true,
+          hook: true,
+          content: true,
+          contentType: true,
+          createdAt: true,
+          sources: {
+            select: { source: { select: { externalId: true, title: true } } },
+          },
+        },
         take: 100,
         orderBy: { createdAt: "desc" },
       }),
@@ -808,6 +823,28 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const picked = ordered[attempt]!;
       const source = picked.item;
+      if (!executionDirective) {
+        const cooldown = generationCooldownReason({
+          sourceProjectKey: projectKeyFromSource(source.externalId, source.title),
+          contentType: contentType.type,
+          recentPosts: recentPosts.map((post) => ({
+            createdAt: post.createdAt,
+            contentType: post.contentType,
+            projectKeys: post.sources
+              .map(({ source: linkedSource }) =>
+                projectKeyFromSource(linkedSource.externalId, linkedSource.title),
+              )
+              .filter((key): key is string => Boolean(key)),
+          })),
+          now,
+          settings,
+        });
+        if (cooldown) {
+          lastError = `Cooldown: ${cooldown}`;
+          log(logs, `${lastError} — trying next source…`, options.onLog);
+          continue;
+        }
+      }
       const providerUses = usedProviderCounts.get(source.provider) ?? 0;
       if (
         source.provider !== "project" &&
@@ -872,6 +909,13 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         scores = blendQualityScores(scores, modelScore);
       }
 
+      const adaptiveGate = generationQualityGate(scores, settings);
+      if (adaptiveGate.length > 0) {
+        lastError = `Adaptive quality gate: ${adaptiveGate.join("; ")}`;
+        log(logs, `${lastError} — trying next source…`, options.onLog);
+        continue;
+      }
+
       const engagementFloor = researchMode === "fast" ? 5.8 : 6.5;
       if (audit.score < engagementFloor && useAi) {
         lastError = `Low engagement score ${audit.score}`;
@@ -880,7 +924,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       }
 
       const rejectFloor = researchMode === "fast" ? threshold - 3 : threshold - 1.5;
-      if (scores.overall < rejectFloor && useAi) {
+      if (!settings.adaptiveCadenceEnabled && scores.overall < rejectFloor && useAi) {
         lastError = `Low quality score ${scores.overall}`;
         log(logs, `Rejected draft (${scores.overall}), trying next source…`, options.onLog);
         continue;
@@ -1035,6 +1079,32 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     }
 
     if (produced === 0) {
+      if (settings.adaptiveCadenceEnabled) {
+        const reason = `Adaptive quality gate skipped this slot: ${lastError || "no candidate cleared the publishing bar"}`;
+        await skipSlot(options.userId, slotIndex, reason);
+        await prisma.generationJob.update({
+          where: { id: job.id },
+          data: {
+            status: "completed",
+            producedCount: 0,
+            error: null,
+            logsJson: JSON.stringify([...logs, reason]),
+            completedAt: new Date(),
+          },
+        });
+        log(logs, reason, options.onLog);
+        return {
+          jobId: job.id,
+          researchRunId: researchRun.id,
+          postsCreated: 0,
+          sourcesFound: savedByKey.size,
+          logs,
+          skipped: true,
+          skipReason: reason,
+          slotIndex,
+          scheduledFor: scheduledFor.toISOString(),
+        };
+      }
       throw new Error(lastError || "Could not produce a quality post for this slot");
     }
 

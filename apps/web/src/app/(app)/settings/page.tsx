@@ -38,6 +38,12 @@ export default async function SettingsPage() {
           firstPostHour: settings.firstPostHour,
           lastPostHour: settings.lastPostHour,
           defaultPlatforms: settings.defaultPlatforms,
+          adaptiveCadenceEnabled: settings.adaptiveCadenceEnabled,
+          xPostsPerDay: settings.xPostsPerDay,
+          linkedInPostsPerWeek: settings.linkedInPostsPerWeek,
+          minimumNovelty: settings.minimumNovelty,
+          projectCooldownHours: settings.projectCooldownHours,
+          contentTypeCooldownHours: settings.contentTypeCooldownHours,
         }}
         topics={topics}
         styles={styles}

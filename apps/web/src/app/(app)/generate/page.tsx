@@ -12,7 +12,7 @@ import { formatSlotDateTime, pickSlotForGeneration } from "@/lib/schedule/slots"
 export default async function GeneratePage() {
   const session = await requireUser();
   const userId = session.user.id;
-  const { plan, slots } = await getTodaySlotRows(userId);
+  const { plan, slots, settings } = await getTodaySlotRows(userId);
 
   const filled = new Set(slots.filter((s) => s.isFilled).map((s) => s.slotIndex));
   const nextMissing = pickSlotForGeneration(plan, filled);
@@ -28,7 +28,7 @@ export default async function GeneratePage() {
       <PageHeader
         kicker="Pipeline"
         title="Generate"
-        description={`Auto via cron · manual override only · skip or regenerate · ${plan.timezone}`}
+        description={`Adaptive quality gate · ${plan.postsPerDay} draft slot${plan.postsPerDay === 1 ? "" : "s"}/day · manual publishing · ${plan.timezone}`}
       />
 
       <GeneratePanel
@@ -48,6 +48,7 @@ export default async function GeneratePage() {
       />
 
       <SlotBoard
+        adaptiveCadence={settings.adaptiveCadenceEnabled}
         slots={slots.map((s) => ({
           slotIndex: s.slotIndex,
           scheduledForLabel: formatSlotDateTime(s.scheduledFor, plan.timezone),

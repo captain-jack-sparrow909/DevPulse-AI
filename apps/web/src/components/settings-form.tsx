@@ -15,6 +15,12 @@ type Settings = {
   firstPostHour: number;
   lastPostHour: number;
   defaultPlatforms: string;
+  adaptiveCadenceEnabled: boolean;
+  xPostsPerDay: number;
+  linkedInPostsPerWeek: number;
+  minimumNovelty: number;
+  projectCooldownHours: number;
+  contentTypeCooldownHours: number;
 };
 
 type Topic = { id: string; name: string; keywords: string; active: boolean };
@@ -111,20 +117,42 @@ export function SettingsForm({
               }
             />
           </div>
+          <label className="flex items-center gap-3 rounded-xl border border-teal-400/15 bg-teal-400/[0.05] p-3 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={settings.adaptiveCadenceEnabled}
+              onChange={(event) =>
+                setSettings({ ...settings, adaptiveCadenceEnabled: event.target.checked })
+              }
+              className="h-4 w-4 accent-teal-400"
+            />
+            <span>
+              <span className="block text-sm font-medium text-teal-100">Adaptive cadence</span>
+              <span className="block text-xs text-zinc-500">
+                Generate fewer high-confidence drafts and let each platform publish independently.
+              </span>
+            </span>
+          </label>
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Posts per day</label>
+            <label className="mb-1 block text-xs text-zinc-400">X posts per day</label>
             <Input
               type="number"
-              value={settings.postsPerDay}
-              onChange={(e) => setSettings({ ...settings, postsPerDay: Number(e.target.value) })}
+              min={1}
+              max={4}
+              value={settings.xPostsPerDay}
+              onChange={(e) => setSettings({ ...settings, xPostsPerDay: Number(e.target.value) })}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Default platforms</label>
+            <label className="mb-1 block text-xs text-zinc-400">LinkedIn posts per week</label>
             <Input
-              value={settings.defaultPlatforms}
-              onChange={(e) => setSettings({ ...settings, defaultPlatforms: e.target.value })}
-              placeholder="x,linkedin"
+              type="number"
+              min={1}
+              max={7}
+              value={settings.linkedInPostsPerWeek}
+              onChange={(e) =>
+                setSettings({ ...settings, linkedInPostsPerWeek: Number(e.target.value) })
+              }
             />
           </div>
           <div>
@@ -143,6 +171,57 @@ export function SettingsForm({
               onChange={(e) => setSettings({ ...settings, lastPostHour: Number(e.target.value) })}
             />
           </div>
+          <div>
+            <label className="mb-1 block text-xs text-zinc-400">Minimum novelty (0–10)</label>
+            <Input
+              type="number"
+              min={0}
+              max={10}
+              step="0.1"
+              value={settings.minimumNovelty}
+              onChange={(e) =>
+                setSettings({ ...settings, minimumNovelty: Number(e.target.value) })
+              }
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-zinc-400">Project cooldown (hours)</label>
+            <Input
+              type="number"
+              min={0}
+              max={168}
+              value={settings.projectCooldownHours}
+              onChange={(e) =>
+                setSettings({ ...settings, projectCooldownHours: Number(e.target.value) })
+              }
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-zinc-400">Content-type cooldown (hours)</label>
+            <Input
+              type="number"
+              min={0}
+              max={168}
+              value={settings.contentTypeCooldownHours}
+              onChange={(e) =>
+                setSettings({ ...settings, contentTypeCooldownHours: Number(e.target.value) })
+              }
+            />
+          </div>
+          {!settings.adaptiveCadenceEnabled && (
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Legacy posts per day</label>
+              <Input
+                type="number"
+                min={1}
+                max={12}
+                value={settings.postsPerDay}
+                onChange={(e) =>
+                  setSettings({ ...settings, postsPerDay: Number(e.target.value) })
+                }
+              />
+            </div>
+          )}
           <div className="sm:col-span-2">
             <Button
               className="w-full sm:w-auto"

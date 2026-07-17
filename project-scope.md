@@ -37,7 +37,7 @@ Each generated post should feel human-written, educational, and engaging rather 
 ```text
 Goals:
 
-- Generate content automatically every day, there should be 12 posts exactly throughout the day.
+- Generate selectively every day, with one or two draft windows and no obligation to fill them.
 - Research current trends before writing.
 - Avoid hallucinated facts.
 - Cite sources internally.
@@ -62,7 +62,7 @@ Core Features
 - Reddit integration
 - AI paper integration
 - Save drafts
-- Schedule posts, first post should be ready by 6am in the morning, last post should be ready by 9pm, there're 12 posts in total, the rest you can decide with a delay between them
+- Schedule adaptive draft windows and recommend X/LinkedIn publishing independently from measured results
 - Publish to X, but not without my approval, my approval is must
 - Publish to LinkedIn, but not without my approval, my approval is must
 - Analytics
@@ -436,6 +436,14 @@ Phase 14 — completed
 - Individual rejection, whole-plan approval, cancellation, skipping, and completion controls
 - Approved anchors guide matching slot generation without bypassing draft review or manual publishing
 - Passive iCalendar export plus explicit publish and valid-24h measurement confirmation
+
+Phase 15 — completed
+- Adaptive generation cadence with two X-oriented daily draft windows by default
+- Independent LinkedIn weekly publishing days and per-platform recommendation queues
+- Evidence, overall-quality, novelty, project-cooldown, and content-type-cooldown gates
+- Intentional slot skips when no candidate clears the configured publishing bar
+- Measured posting-hour recommendations with conservative small-sample fallbacks
+- Daily manual engagement sequence before publishing, after publishing, and at the 24-hour checkpoint
 ```
 
 ## One additional recommendation

@@ -44,6 +44,12 @@ export async function PATCH(request: Request) {
       firstPostHour?: number;
       lastPostHour?: number;
       defaultPlatforms?: string;
+      adaptiveCadenceEnabled?: boolean;
+      xPostsPerDay?: number;
+      linkedInPostsPerWeek?: number;
+      minimumNovelty?: number;
+      projectCooldownHours?: number;
+      contentTypeCooldownHours?: number;
     };
     topic?: { id?: string; name: string; keywords?: string; active?: boolean; delete?: boolean };
     style?: {
@@ -73,10 +79,57 @@ export async function PATCH(request: Request) {
   };
 
   if (body.settings) {
+    const input = body.settings;
+    const bounded = (value: number | undefined, min: number, max: number) =>
+      typeof value === "number" && Number.isFinite(value)
+        ? Math.min(max, Math.max(min, value))
+        : undefined;
+    const settingsData = {
+      ...(typeof input.timezone === "string" && input.timezone.trim()
+        ? { timezone: input.timezone.trim().slice(0, 80) }
+        : {}),
+      ...(typeof input.defaultPlatforms === "string"
+        ? { defaultPlatforms: input.defaultPlatforms.trim().slice(0, 40) }
+        : {}),
+      ...(typeof input.adaptiveCadenceEnabled === "boolean"
+        ? { adaptiveCadenceEnabled: input.adaptiveCadenceEnabled }
+        : {}),
+      ...(bounded(input.postsPerDay, 1, 12) != null
+        ? { postsPerDay: Math.round(bounded(input.postsPerDay, 1, 12)!) }
+        : {}),
+      ...(bounded(input.xPostsPerDay, 1, 4) != null
+        ? { xPostsPerDay: Math.round(bounded(input.xPostsPerDay, 1, 4)!) }
+        : {}),
+      ...(bounded(input.linkedInPostsPerWeek, 1, 7) != null
+        ? { linkedInPostsPerWeek: Math.round(bounded(input.linkedInPostsPerWeek, 1, 7)!) }
+        : {}),
+      ...(bounded(input.qualityThreshold, 0, 10) != null
+        ? { qualityThreshold: bounded(input.qualityThreshold, 0, 10)! }
+        : {}),
+      ...(bounded(input.minimumNovelty, 0, 10) != null
+        ? { minimumNovelty: bounded(input.minimumNovelty, 0, 10)! }
+        : {}),
+      ...(bounded(input.firstPostHour, 0, 23) != null
+        ? { firstPostHour: Math.round(bounded(input.firstPostHour, 0, 23)!) }
+        : {}),
+      ...(bounded(input.lastPostHour, 0, 23) != null
+        ? { lastPostHour: Math.round(bounded(input.lastPostHour, 0, 23)!) }
+        : {}),
+      ...(bounded(input.projectCooldownHours, 0, 168) != null
+        ? { projectCooldownHours: Math.round(bounded(input.projectCooldownHours, 0, 168)!) }
+        : {}),
+      ...(bounded(input.contentTypeCooldownHours, 0, 168) != null
+        ? {
+            contentTypeCooldownHours: Math.round(
+              bounded(input.contentTypeCooldownHours, 0, 168)!,
+            ),
+          }
+        : {}),
+    };
     await prisma.userSettings.upsert({
       where: { userId: user.id },
-      create: { userId: user.id, ...body.settings },
-      update: body.settings,
+      create: { userId: user.id, ...settingsData },
+      update: settingsData,
     });
   }
 

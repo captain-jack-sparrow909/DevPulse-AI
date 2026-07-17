@@ -20,7 +20,13 @@ export type SlotBoardItem = {
   scoreOverall: number | null;
 };
 
-export function SlotBoard({ slots }: { slots: SlotBoardItem[] }) {
+export function SlotBoard({
+  slots,
+  adaptiveCadence,
+}: {
+  slots: SlotBoardItem[];
+  adaptiveCadence: boolean;
+}) {
   const router = useRouter();
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -105,9 +111,11 @@ export function SlotBoard({ slots }: { slots: SlotBoardItem[] }) {
         <CardHeader>
           <CardTitle>Today&apos;s slot board</CardTitle>
           <CardDescription>
-            Cron auto-preps each slot ~50 min before its time and{" "}
+            Cron auto-preps each high-confidence draft slot ~50 min before its time and{" "}
             <strong className="text-zinc-300">retries empty due slots every 15 min</strong> — you
-            should not need Regenerate for a missing post. Use{" "}
+            should not need Regenerate for a missing post. {adaptiveCadence && (
+              <>A slot can stay intentionally empty when every draft fails the quality, novelty, evidence, or cooldown gate. </>
+            )}Use{" "}
             <strong className="text-zinc-300">Skip</strong> to leave a window empty, or{" "}
             <strong className="text-zinc-300">Regenerate</strong> only if you dislike a draft.
           </CardDescription>
@@ -131,7 +139,7 @@ export function SlotBoard({ slots }: { slots: SlotBoardItem[] }) {
                       <div className="font-medium text-inherit">
                         Slot {n}
                         <span className="ml-1.5 text-xs font-normal opacity-70">
-                          · LinkedIn + X
+                          · X + LinkedIn draft pack
                         </span>
                       </div>
                       <div className="mt-0.5 text-xs opacity-80">{slot.scheduledForLabel}</div>

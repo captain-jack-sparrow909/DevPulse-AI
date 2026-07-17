@@ -20,7 +20,6 @@ export function GeneratePanel({
   };
 }) {
   const router = useRouter();
-  const [platforms, setPlatforms] = useState({ x: true, linkedin: true });
   const [allowEarly, setAllowEarly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
@@ -33,21 +32,11 @@ export function GeneratePanel({
     setResult("");
     setLogs(["Starting slot pipeline (1 post only)…"]);
 
-    const selected = [
-      ...(platforms.x ? (["x"] as const) : []),
-      ...(platforms.linkedin ? (["linkedin"] as const) : []),
-    ];
-    if (selected.length === 0) {
-      setError("Select at least one platform");
-      setLoading(false);
-      return;
-    }
-
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platforms: selected, allowEarly }),
+        body: JSON.stringify({ allowEarly }),
       });
       const data = await res.json() as { error?: string; operationRunId?: string };
       if (!res.ok) {
@@ -78,9 +67,9 @@ export function GeneratePanel({
         <CardHeader>
           <CardTitle>Manual override (1 post)</CardTitle>
           <CardDescription>
-            <strong className="text-zinc-300">Cron already generates</strong> each due slot
-            automatically (6:00 → 21:00 UAE). Use this only if a tick failed or you want to draft
-            early. You still approve and post yourself — generation never waits for a button click.
+            <strong className="text-zinc-300">Cron already evaluates</strong> each adaptive slot
+            automatically. Use this only if a tick failed or you want to draft early. Weak or
+            repetitive candidates are intentionally skipped; you still approve and publish yourself.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -112,26 +101,9 @@ export function GeneratePanel({
           )}
 
           <div className="flex flex-wrap gap-6">
-            <div>
-              <label className="mb-1 block text-xs text-zinc-400">Platforms (alternate by slot)</label>
-              <div className="flex gap-4 text-sm">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={platforms.x}
-                    onChange={(e) => setPlatforms((p) => ({ ...p, x: e.target.checked }))}
-                  />
-                  X
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={platforms.linkedin}
-                    onChange={(e) => setPlatforms((p) => ({ ...p, linkedin: e.target.checked }))}
-                  />
-                  LinkedIn
-                </label>
-              </div>
+            <div className="max-w-sm rounded-lg border border-teal-400/15 bg-teal-400/[0.05] px-3 py-2 text-xs text-zinc-400">
+              Each accepted idea keeps both platform-native drafts. The Publishing command center
+              decides whether X, LinkedIn, both, or neither should ship today.
             </div>
             <div>
               <label className="mb-1 flex items-center gap-2 text-xs text-zinc-400">
@@ -162,8 +134,9 @@ export function GeneratePanel({
           </div>
 
           <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2 text-xs text-violet-100/90">
-            <strong className="text-violet-200">Automatic (product-first):</strong> each slot uses owned
+            <strong className="text-violet-200">Automatic and selective:</strong> each slot uses owned
             project facts plus only its targeted lane: GitHub/official RSS, arXiv/HF, or limited HN/Reddit.
+            Quality, novelty, and cooldown gates can leave the slot empty.
             Sources save between chunks. If time runs out, the{" "}
             <strong className="text-violet-100">next 15‑min cron continues</strong> (including write).
             No self-HTTP chain (Vercel blocks that with 508). Screenshots: Recapture on the post.

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { contentHash } from "@/lib/hash";
 import { buildSlotPlan, dayBoundsUtc } from "@/lib/schedule/slots";
+import { effectivePostsPerDay } from "@/lib/publishing/adaptive";
 
 async function getSettings(userId: string) {
   return prisma.userSettings.upsert({
@@ -18,7 +19,7 @@ export async function getTodaySlotRows(userId: string) {
     settings.timezone,
     settings.firstPostHour,
     settings.lastPostHour,
-    settings.postsPerDay,
+    effectivePostsPerDay(settings),
   );
   const { start, end } = dayBoundsUtc(now, settings.timezone);
 
@@ -135,7 +136,7 @@ export async function skipSlot(
     settings.timezone,
     settings.firstPostHour,
     settings.lastPostHour,
-    settings.postsPerDay,
+    effectivePostsPerDay(settings),
   );
 
   if (slotIndex < 0 || slotIndex >= plan.slots.length) {

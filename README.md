@@ -21,6 +21,7 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Weekly growth review | [`docs/WEEKLY-GROWTH.md`](./docs/WEEKLY-GROWTH.md) |
 | Weekly execution plan | [`docs/WEEKLY-EXECUTION.md`](./docs/WEEKLY-EXECUTION.md) |
 | Measurement quality | [`docs/MEASUREMENT-QUALITY.md`](./docs/MEASUREMENT-QUALITY.md) |
+| Adaptive publishing | [`docs/ADAPTIVE-PUBLISHING.md`](./docs/ADAPTIVE-PUBLISHING.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -44,6 +45,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 13. Observes production health, stage timings, cron freshness, and checkpoint-safe recovery
 14. Produces an approval-gated weekly continue/reduce/test plan from measured growth evidence
 15. Normalizes post-age checkpoints, prevents duplicate imports, and gates reviews on comparable 24-hour evidence
+16. Publishes selectively with platform-specific quotas, quality and novelty gates, cooldowns, and measured timing recommendations
 
 ---
 
@@ -55,7 +57,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 | Research policy | Product-first, lane-specific, and relevance-filtered |
 | Slot generation | Exactly **one** post when a slot is due; fresh research each run |
 | Timezone default | **Asia/Dubai** (UAE, UTC+4) — editable in Settings |
-| Daily cadence | **12 slots**, first **06:00**, last **21:00** (evenly spaced) |
+| Daily cadence | Adaptive by default: **2 X draft windows/day** and **4 LinkedIn publishing days/week** |
 | Approval | Review → approve → ready → you post → “I posted this manually” |
 
 ---
@@ -89,11 +91,11 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-1. **Register** an account  
-2. Run cron (below) so slots auto-generate — **Generate** is only a manual override  
-3. Each due slot produces **one** post with **live** research  
-4. **Posts** → review / edit → **Approve for slot**  
-5. When **Ready to post**: **Copy for manual post**, download screenshot if any, post on X/LinkedIn yourself  
+1. **Register** an account
+2. Run cron (below) so adaptive windows are evaluated — **Generate** is only a manual override
+3. A due window produces a post only when evidence, novelty, quality, and cooldown gates pass
+4. **Posts** → review / edit → **Approve for slot**
+5. When **Ready to post**: **Copy for manual post**, download screenshot if any, post on X/LinkedIn yourself
 6. Click **I posted this manually**
 
 ### Environment
@@ -125,16 +127,15 @@ Without `DEEPSEEK_API_KEY`, research still runs; posts use grounded demo templat
 
 ## Slot-based generation
 
-Do **not** generate all 12 posts at 06:00.
+Do **not** force content merely because a window exists.
 
 ```
-06:00  → research + write slot 1
-07:22  → research again + write slot 2
- …
-21:00  → research again + write slot 12
+09:00  → evaluate the first high-confidence draft window
+18:00  → re-research and evaluate the second window
+LinkedIn → publish only on its configured weekly days
 ```
 
-Cron finds the earliest **due** slot without a post for today and creates **at most one** dual-format post pack (LinkedIn + X) per user per tick. It also runs retention cleanup and keeps Supabase active.
+Cron finds the earliest **due** adaptive window and creates **at most one** dual-format draft pack per user per tick. When every candidate misses a gate, it intentionally skips the window. The Publishing command center then decides whether X, LinkedIn, both, or neither should ship.
 
 ```bash
 # terminal 1 — app
@@ -165,6 +166,7 @@ Manual generation is asynchronous: `/api/generate` returns `202` immediately, th
 | Route | Purpose |
 |-------|---------|
 | `/dashboard` | Stats, recent posts, system status |
+| `/publishing` | Platform-specific daily queue, timing, quality gates, cooldowns, and intentional skips |
 | `/generate` | Due-slot generation + today’s slot board |
 | `/posts` | History, search, filters |
 | `/posts/[id]` | Edit, approve, copy, screenshot, mark posted |
@@ -229,7 +231,7 @@ npx playwright install chromium
 - **Supabase** — free Postgres; wipe near ~450MB when trends are stale  
 - **DeepSeek** — cheap generation  
 - **Cloudflare R2** — optional object storage (screenshots currently local)  
-- No Redis required for 12 posts/day  
+- No Redis required for the low-volume adaptive pipeline
 
 ---
 
@@ -278,6 +280,7 @@ DevPulse AI/
 | 12 | Done | Deterministic weekly evidence reviews with approval-gated growth decisions |
 | 13 | Done | Comparable checkpoint queues, quality audits, follower observations and idempotent imports |
 | 14 | Done | Approval-gated seven-day anchor plans, calendar export and generation handoff |
+| 15 | Done | Adaptive platform cadence, publishing quality gates, cooldowns, measured timing and daily command center |
 
 ---
 

@@ -4,6 +4,7 @@ import { dayBoundsUtc } from "@/lib/schedule/slots";
 import { getContentStrategy } from "@/lib/content/strategy-store";
 import { DEFAULT_CONTENT_STRATEGY, contentTypeForSlot, type ContentMixItem, type ContentStrategyConfig, type ContentType } from "@/lib/content/strategy";
 import { buildExecutionPlan } from "@/lib/execution-plan/engine";
+import { effectivePostsPerDay } from "@/lib/publishing/adaptive";
 
 function json<T>(raw: string, fallback: T): T {
   try {
@@ -45,7 +46,7 @@ export async function createWeeklyExecutionPlan(userId: string, reviewId?: strin
     timezone,
     firstPostHour: settings?.firstPostHour ?? 6,
     lastPostHour: settings?.lastPostHour ?? 21,
-    postsPerDay: settings?.postsPerDay ?? 12,
+    postsPerDay: settings ? effectivePostsPerDay(settings) : 2,
     strategy,
     reviewId: review.id,
     reviewStatus: review.status,

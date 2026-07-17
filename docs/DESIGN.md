@@ -2,7 +2,7 @@
 
 **Product:** AI-powered, research-first content generation platform for a solo software engineer.  
 **Primary surfaces:** X (Twitter) + LinkedIn  
-**Cadence:** Exactly **12 posts/day**, first ready **6:00**, last ready **21:00**, human approval required before any publish.
+**Cadence:** Adaptive by default—two X-oriented draft windows per day and four LinkedIn publishing days per week, with human approval required before any publish.
 
 ---
 
@@ -17,7 +17,7 @@ DevPulse is **research-first**:
 3. **Angle generation** (tip, thread, comparison, hot take, architecture breakdown…).
 4. **Write → score → rewrite** until quality threshold (default 8.5/10).
 5. **Human approval** is a hard gate — no auto-publish.
-6. **Schedule** across 6am–9pm (12 slots).
+6. **Schedule selectively** across one or two adaptive daily draft windows.
 7. **Measure** real engagement without confusing generation scores with distribution (Phase 4).
 8. **Learn carefully** through controlled, approval-gated experiments (Phase 5).
 9. **Repurpose visually** with grounded branded cards and carousels (Phase 6).
@@ -28,6 +28,7 @@ DevPulse is **research-first**:
 14. **Operate reliably** with health probes, telemetry, and checkpoint-safe recovery (Phase 11).
 15. **Decide from comparable evidence** in a weekly approval-gated review (Phases 12–13).
 16. **Execute deliberately** through a seven-day anchor plan that still requires manual publishing (Phase 14).
+17. **Publish selectively** through platform-specific quotas, quality gates, cooldowns, and measured timing (Phase 15).
 
 For a single user on free/cheap tiers, complexity must stay low: one deployable app, DB-backed jobs instead of Redis at first, free public APIs for research, DeepSeek for LLM, Supabase when ready.
 
@@ -39,32 +40,32 @@ For a single user on free/cheap tiers, complexity must stay low: one deployable 
 |----------|--------|-----------|
 | Runtime shape | **Next.js full-stack** (App Router) | TypeScript everywhere, one deploy (Vercel), no separate Nest/FastAPI until needed |
 | Monorepo | `apps/web` + `packages/*` | Matches scope; shared types/AI/db without over-fragmenting |
-| Database | **Prisma + SQLite (local)** / **Postgres (Supabase prod)** | Zero-config local; free Supabase later; cron wipe when ~450MB |
+| Database | **Prisma + Postgres (Supabase)** | One durable data model locally and in production |
 | Auth | **Better Auth** (email/password) | Scope requirement; works offline with SQLite |
-| Queue | **DB job table + cron** (not Redis/BullMQ yet) | Free tier; 12 jobs/day doesn’t need Redis |
+| Queue | **DB job table + cron** (not Redis/BullMQ yet) | Free tier; low adaptive volume does not need Redis |
 | AI provider | **DeepSeek** (OpenAI-compatible API) | Cheapest quality for this volume |
 | Research | Free public APIs first (HN, GitHub, arXiv, Reddit JSON, RSS) | No paid keys for Phase 1–2; Tavily optional later |
 | Publish | **Manual only** — never call X/LinkedIn write APIs | X write API is paid/restricted; user posts by hand |
 | Screenshots | **Playwright** (Chromium) captures source pages when helpful | Optional image per post for higher engagement |
 | Agents | Modular agent interfaces; Phase 1 = sequential pipeline; Phase 3 = LangGraph | Ship value before orchestration framework |
 | Storage | Local filesystem / optional R2 later | No S3 cost for solo use |
-| Schedule | 12 slots: 06:00–21:00, ~82 min apart | Matches “first 6am, last 9pm, 12 posts” |
+| Schedule | Adaptive default: 2 daily draft windows; LinkedIn 4 days/week | Favors attention and evidence over calendar volume |
 
-### Daily schedule slots (local timezone, configurable)
+### Daily draft windows (local timezone, configurable)
 
 ```
-06:00, 07:22, 08:44, 10:06, 11:28, 12:50,
-14:12, 15:34, 16:56, 18:18, 19:40, 21:00
+09:00, 18:00
 ```
 
-### Slot-based generation (not batch-of-12)
+### Selective slot-based generation
 
-Do **not** generate all 12 posts at 6:00. Each slot triggers its own research + write run when due:
+Do **not** generate content merely to fill a calendar. Each adaptive window triggers its own research + write evaluation:
 
 1. Cron (~every 15 min) finds the earliest **due** slot without a post for today  
 2. Fresh research (HN/GitHub/arXiv/Reddit/…) runs at that moment  
-3. Exactly **one** post is written for that slot  
-4. Later slots re-research so afternoon news can appear the same day  
+3. At most **one** draft is written when it clears every publishing gate
+4. A weak or repetitive window is intentionally skipped
+5. X and LinkedIn publishing recommendations are evaluated independently
 
 Endpoint: `GET/POST /api/cron/slot` (protected by `CRON_SECRET`). Fills the **latest** due empty slot; older misses are auto-skipped. Manual override: **Generate** page (not required for normal operation).
 
@@ -242,6 +243,13 @@ When a post benefits from media (repos, papers, demos, many LinkedIn posts), Chr
 - Matching-slot content, project, angle, and media guidance without creating or publishing posts
 - Passive iCalendar export and explicit drafted, published, and measured lifecycle
 - Valid 24-hour checkpoint required before an anchor can be marked measured
+
+### Phase 15 — Adaptive publishing
+- X and LinkedIn quotas evaluated independently from their distribution workflows
+- Strict source-evidence, overall-quality, novelty, project-cooldown, and content-type gates
+- Intentionally skipped windows are successful quality decisions, not pipeline failures
+- Posting-hour recommendations learned from comparable platform snapshots
+- Publishing command center ranks the best eligible draft and explains every holdback
 
 ---
 

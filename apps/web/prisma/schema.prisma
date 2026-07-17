@@ -94,16 +94,22 @@ model Verification {
 // ─── Domain ───────────────────────────────────────────────────────
 
 model UserSettings {
-  id               String  @id @default(cuid())
-  userId           String  @unique
-  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  timezone         String  @default("Asia/Dubai")
-  postsPerDay      Int     @default(12)
-  qualityThreshold Float   @default(8.0)
-  firstPostHour    Int     @default(6)
-  lastPostHour     Int     @default(21)
-  defaultPlatforms String  @default("x,linkedin") // comma-separated
-  autoGenerate     Boolean @default(false)
+  id                       String  @id @default(cuid())
+  userId                   String  @unique
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timezone                 String  @default("Asia/Dubai")
+  postsPerDay              Int     @default(2) // legacy/fallback cadence when adaptive mode is off
+  qualityThreshold         Float   @default(8.0)
+  firstPostHour            Int     @default(8)
+  lastPostHour             Int     @default(18)
+  defaultPlatforms         String  @default("x,linkedin") // comma-separated
+  autoGenerate             Boolean @default(false)
+  adaptiveCadenceEnabled   Boolean @default(true)
+  xPostsPerDay             Int     @default(2)
+  linkedInPostsPerWeek     Int     @default(4)
+  minimumNovelty           Float   @default(7.0)
+  projectCooldownHours     Int     @default(36)
+  contentTypeCooldownHours Int     @default(24)
 }
 
 /// Audience positioning, editorial pillars, owned projects, and target content mix.

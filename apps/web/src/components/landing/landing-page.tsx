@@ -25,8 +25,8 @@ const PIPELINE = [
   },
   {
     step: "03",
-    title: "Write one due slot",
-    body: "Twelve slots from 06:00–21:00. Each run does fresh research so afternoon news is not stuck until tomorrow.",
+    title: "Earn a publishing slot",
+    body: "One or two adaptive daily windows. Weak, repetitive, or unsupported ideas are intentionally skipped.",
   },
   {
     step: "04",
@@ -43,8 +43,8 @@ const PROOFS = [
   },
   {
     icon: Clock3,
-    title: "Slot cadence, not batch spam",
-    body: "One post when a slot is due. Midday launches and paper drops can appear in the same day’s later slots.",
+    title: "Selective cadence, not feed spam",
+    body: "X and LinkedIn use separate quotas and measured timing. A quiet day is better than a forced post.",
   },
   {
     icon: ShieldCheck,
@@ -68,20 +68,7 @@ const STACK = [
   "Vercel Cron",
 ] as const;
 
-const SLOTS = [
-  "06:00",
-  "07:22",
-  "08:44",
-  "10:06",
-  "11:28",
-  "12:50",
-  "14:12",
-  "15:34",
-  "16:56",
-  "18:18",
-  "19:40",
-  "21:00",
-] as const;
+const SLOTS = ["09:00", "18:00"] as const;
 
 export function LandingPage() {
   return (
@@ -116,7 +103,7 @@ export function LandingPage() {
               </h1>
               <p className="mt-5 max-w-lg text-[15px] leading-relaxed text-zinc-400 sm:mt-6 sm:text-base sm:text-lg">
                 DevPulse turns real lessons from the products you are building into senior-engineer
-                posts for X and LinkedIn, supported by selective research. One slot at a time. You approve.
+                posts for X and LinkedIn, supported by selective research. Only strong drafts earn a slot. You approve.
                 You post. The feed stays honest.
               </p>
               <div className="mt-7 flex w-full flex-col gap-3 sm:mt-8 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -136,8 +123,8 @@ export function LandingPage() {
               </div>
               <dl className="mt-8 grid max-w-md grid-cols-3 gap-2 border-t border-white/10 pt-6 sm:mt-10 sm:gap-4 sm:pt-8">
                 {[
-                  ["12", "slots / day"],
-                  ["1", "post per due slot"],
+                  ["1–2", "draft windows / day"],
+                  ["2", "platform cadences"],
                   ["0", "auto-publishes"],
                 ].map(([value, label]) => (
                   <div key={label}>
@@ -317,16 +304,15 @@ export function LandingPage() {
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-4">
               <div className="flex items-center gap-2 text-sm text-zinc-300">
                 <Clock3 className="h-4 w-4 text-teal-400" />
-                Daily slot ribbon · Asia/Dubai
+                Adaptive publishing windows · Asia/Dubai
               </div>
               <div className="text-xs text-zinc-500">
-                Cron ticks every ~15 min · at most one post per due slot
+                Cron ticks every ~15 min · weak drafts are skipped
               </div>
             </div>
             <div className="flex gap-2 overflow-x-auto p-4 [scrollbar-width:thin]">
               {SLOTS.map((t, i) => {
-                const state =
-                  i < 4 ? "done" : i === 4 ? "active" : "upcoming";
+                const state = i === 0 ? "done" : "active";
                 return (
                   <div
                     key={t}
