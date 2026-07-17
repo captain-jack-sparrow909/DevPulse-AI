@@ -8,6 +8,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const POST_RETENTION_DAYS = 30;
 const SCREENSHOT_RETENTION_DAYS = 1;
 const ATTRIBUTION_WINDOW_RETENTION_DAYS = 90;
+const OPERATIONS_RETENTION_DAYS = 30;
 
 export interface CleanupResult {
   postsDeleted: number;
@@ -17,6 +18,8 @@ export interface CleanupResult {
   screenshotsDeleted: number;
   visualAssetsDeleted: number;
   attributionWindowsDeleted: number;
+  operationalRunsDeleted: number;
+  healthSnapshotsDeleted: number;
   logs: string[];
 }
 
@@ -97,6 +100,15 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
   });
   log(`Deleted ${attributionWindows.count} attribution windows older than ${ATTRIBUTION_WINDOW_RETENTION_DAYS}d`);
 
+  const operationsCutoff = new Date(Date.now() - OPERATIONS_RETENTION_DAYS * DAY_MS);
+  const operationalRuns = await prisma.operationalRun.deleteMany({
+    where: { startedAt: { lt: operationsCutoff }, status: { not: "running" } },
+  });
+  const healthSnapshots = await prisma.serviceHealthSnapshot.deleteMany({
+    where: { checkedAt: { lt: operationsCutoff } },
+  });
+  log(`Deleted ${operationalRuns.count} operational runs and ${healthSnapshots.count} health snapshots older than ${OPERATIONS_RETENTION_DAYS}d`);
+
   let screenshotsDeleted = await cleanupOldScreenshots(SCREENSHOT_RETENTION_DAYS, log);
 
   if (isR2Configured()) {
@@ -120,6 +132,8 @@ export async function runRetentionCleanup(): Promise<CleanupResult> {
     screenshotsDeleted,
     visualAssetsDeleted: oldVisualAssets.length,
     attributionWindowsDeleted: attributionWindows.count,
+    operationalRunsDeleted: operationalRuns.count,
+    healthSnapshotsDeleted: healthSnapshots.count,
     logs,
   };
 }

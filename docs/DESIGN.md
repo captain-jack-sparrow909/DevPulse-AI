@@ -207,6 +207,13 @@ When a post benefits from media (repos, papers, demos, many LinkedIn posts), Chr
 - Complete impression → click → conversion → follow funnel diagnosis
 - CTA wording and placement dimensions in controlled Phase 5 experiments
 
+### Phase 11 — Production operations and reliability
+- Operational attempts separated from durable generation checkpoints
+- Stage timings and bounded error classification without secrets or content bodies
+- Live PostgreSQL, DeepSeek, R2, GitHub, visual-renderer, cron, and deployment checks
+- Stale invocation detection and checkpoint-safe generation, visual, and repository recovery
+- Thirty-day operations and health history
+
 ---
 
 ## 7. Security & quality bars

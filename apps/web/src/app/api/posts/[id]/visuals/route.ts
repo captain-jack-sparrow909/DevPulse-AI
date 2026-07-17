@@ -8,6 +8,12 @@ import { renderVisualAsset } from "@/lib/visuals/render";
 import { saveVisualFile } from "@/lib/visuals/storage";
 import type { VisualAssetKind } from "@/lib/visuals/types";
 import { parseVariantConfig } from "@/lib/experiments/definitions";
+import {
+  completeOperationalRun,
+  failOperationalRun,
+  recordOperationalEvent,
+  startOperationalRun,
+} from "@/lib/operations/store";
 
 export const maxDuration = 60;
 
@@ -84,15 +90,37 @@ export async function POST(
       altText: brief.altText,
     },
   });
+  const operation = await startOperationalRun({
+    userId: session.user.id,
+    kind: "visual_render",
+    source: "manual",
+    stage: "rendering",
+    subjectType: "visual_asset",
+    subjectId: asset.id,
+    metadata: { kind: assetKind, postId: post.id, targetPlatform: target },
+  });
 
   try {
+    const renderStarted = Date.now();
     const rendered = await renderVisualAsset(assetKind, brief, toBrandConfig(brand));
+    await recordOperationalEvent(operation.id, {
+      stage: "rendered",
+      message: `${assetKind.replaceAll("_", " ")} rendered successfully.`,
+      durationMs: Date.now() - renderStarted,
+      metadata: { bytes: rendered.file.length, pages: rendered.pageCount },
+    });
     const baseKey = `visuals/${session.user.id}/${post.id}/${asset.id}`;
     const extension = rendered.mimeType === "application/pdf" ? "pdf" : "png";
+    const storageStarted = Date.now();
     const file = await saveVisualFile(`${baseKey}.${extension}`, rendered.file, rendered.mimeType);
     const preview = rendered.mimeType === "image/png"
       ? file
       : await saveVisualFile(`${baseKey}-preview.png`, rendered.preview, "image/png");
+    await recordOperationalEvent(operation.id, {
+      stage: "stored",
+      message: "Rendered files saved to durable storage.",
+      durationMs: Date.now() - storageStarted,
+    });
     const completed = await prisma.$transaction(async (tx) => {
       const updated = await tx.postVisualAsset.update({
         where: { id: asset.id },
@@ -122,6 +150,10 @@ export async function POST(
       });
       return updated;
     });
+    await completeOperationalRun(operation.id, {
+      stage: "completed",
+      message: `${assetKind.replaceAll("_", " ")} is ready.`,
+    });
     return NextResponse.json({ asset: completed }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Visual rendering failed";
@@ -129,6 +161,7 @@ export async function POST(
       where: { id: asset.id },
       data: { status: "failed", error: message },
     });
+    await failOperationalRun(operation.id, error, "visual_render");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -4,9 +4,45 @@ import { auth } from "@/lib/auth";
 import { runDueSlotGeneration } from "@/lib/ai/pipeline";
 import { runPhasesWithBudget } from "@/lib/ai/phased-pipeline";
 import { skipSlot } from "@/lib/schedule/slot-actions";
+import { prisma } from "@/lib/db";
+import {
+  completeOperationalRun,
+  failOperationalRun,
+  recordOperationalEvent,
+  startOperationalRun,
+} from "@/lib/operations/store";
 
 /** Local can be higher; Vercel Hobby still caps near 60s — we chain phases. */
 export const maxDuration = 300;
+
+async function observedManualGeneration<T extends {
+  jobId?: string | null;
+  postsCreated?: number;
+  sourcesFound?: number;
+}>(userId: string, stage: string, task: () => Promise<T>): Promise<T & { operationRunId: string }> {
+  const operation = await startOperationalRun({ userId, kind: "generation", source: "manual", stage });
+  const started = Date.now();
+  try {
+    const result = await task();
+    await recordOperationalEvent(operation.id, {
+      stage: "completed",
+      message: `${result.postsCreated ?? 0} post pack(s) created by manual generation.`,
+      durationMs: Date.now() - started,
+      metadata: { jobId: result.jobId, sourcesFound: result.sourcesFound },
+    });
+    if (result.jobId) {
+      await prisma.operationalRun.update({
+        where: { id: operation.id },
+        data: { subjectType: "generation_job", subjectId: result.jobId },
+      });
+    }
+    await completeOperationalRun(operation.id, { stage: "completed", message: "Manual generation completed." });
+    return { ...result, operationRunId: operation.id };
+  } catch (error) {
+    await failOperationalRun(operation.id, error, stage);
+    throw error;
+  }
+}
 
 /**
  * Slot actions:
@@ -75,33 +111,37 @@ export async function POST(request: Request) {
 
     // Targeted regenerate: clear + one-shot pipeline for that slot (manual override)
     if (regenerate && slotIndex !== undefined) {
-      const result = await runDueSlotGeneration({
-        userId: session.user.id,
-        platforms,
-        slotIndex,
-        allowEarly: true,
-        regenerate: true,
-        researchMode: "fast",
-        skipScreenshot: true,
-      });
+      const result = await observedManualGeneration(session.user.id, "regenerate", () =>
+        runDueSlotGeneration({
+          userId: session.user.id,
+          platforms,
+          slotIndex,
+          allowEarly: true,
+          regenerate: true,
+          researchMode: "fast",
+          skipScreenshot: true,
+        }),
+      );
       return NextResponse.json({ ...result, action: "regenerate" });
     }
 
     // Manual override can intentionally prepare the next unfilled slot before
     // its normal prep window. The resumable cron path remains time-driven.
     if (allowEarly) {
-      const result = await runDueSlotGeneration({
-        userId: session.user.id,
-        platforms,
-        allowEarly: true,
-        researchMode: "fast",
-        skipScreenshot: true,
-      });
+      const result = await observedManualGeneration(session.user.id, "early_generation", () =>
+        runDueSlotGeneration({
+          userId: session.user.id,
+          platforms,
+          allowEarly: true,
+          researchMode: "fast",
+          skipScreenshot: true,
+        }),
+      );
       return NextResponse.json({ ...result, action: "generate" });
     }
 
     // Multi-phase under a time budget (same as cron; no self-fetch)
-    const r = await runPhasesWithBudget(session.user.id, 55_000);
+    const r = await runPhasesWithBudget(session.user.id, 55_000, { source: "manual" });
     return NextResponse.json({
       postsCreated: r.postsCreated,
       jobId: r.jobId,

@@ -62,6 +62,13 @@ import {
   recommendedMediaTypeForContent,
   resolveGenerationLearning,
 } from "@/lib/experiments/service";
+import {
+  completeOperationalRun,
+  failOperationalRun,
+  recordOperationalEvent,
+  startOperationalRun,
+  type OperationSource,
+} from "@/lib/operations/store";
 
 export interface PhaseResult {
   jobId: string | null;
@@ -76,6 +83,7 @@ export interface PhaseResult {
   /** True when more phases remain — cron should self-chain another worker. */
   continueChain?: boolean;
   phase?: string;
+  operationRunId?: string;
 }
 
 export interface PhasedJobMeta {
@@ -877,7 +885,16 @@ async function minMsForNextPhase(userId: string): Promise<number> {
 export async function runPhasesWithBudget(
   userId: string,
   budgetMs = 52_000,
+  context: { source?: OperationSource; retryOfId?: string } = {},
 ): Promise<PhaseResult> {
+  const operation = await startOperationalRun({
+    userId,
+    kind: "generation",
+    source: context.source ?? "system",
+    stage: "generation",
+    retryOfId: context.retryOfId,
+    metadata: { budgetMs },
+  });
   const t0 = Date.now();
   const allLogs: string[] = [];
   let last: PhaseResult = {
@@ -891,45 +908,90 @@ export async function runPhasesWithBudget(
   let postsCreated = 0;
   let phasesRun = 0;
 
-  while (Date.now() - t0 < budgetMs) {
-    const remaining = budgetMs - (Date.now() - t0);
-    const need = await minMsForNextPhase(userId);
-    if (remaining < need) {
-      log(
-        allLogs,
-        `Budget pause: ${Math.round(remaining / 1000)}s left, need ~${Math.round(need / 1000)}s for next phase — next external cron will continue`,
-      );
-      last = {
-        ...last,
-        continueChain: true,
-        skipReason: `Paused for next cron tick (${phasesRun} phase(s) this run)`,
-        logs: allLogs,
-      };
-      break;
-    }
-
-    const r = await runOneGenerationPhase(userId);
-    phasesRun += 1;
-    allLogs.push(...r.logs);
-    postsCreated += r.postsCreated;
-    last = { ...r, logs: allLogs, postsCreated };
-
-    if (r.postsCreated > 0) {
-      log(allLogs, `Done after ${phasesRun} phase(s) in ${Date.now() - t0}ms`);
-      return { ...last, postsCreated, logs: allLogs, continueChain: false };
-    }
-    if (!r.continueChain) {
-      return { ...last, postsCreated, logs: allLogs, continueChain: false };
-    }
-  }
-
-  return {
-    ...last,
-    postsCreated,
-    logs: allLogs,
-    continueChain: last.continueChain && postsCreated === 0,
-    phase: last.phase ?? `budget:${phasesRun}`,
+  const finish = async (result: PhaseResult): Promise<PhaseResult> => {
+    const stage = result.continueChain ? "checkpoint_saved" : result.phase ?? "completed";
+    await completeOperationalRun(operation.id, {
+      stage,
+      message: result.continueChain
+        ? "Invocation ended safely; the next cron tick will resume the persisted checkpoint."
+        : result.postsCreated
+          ? `${result.postsCreated} post pack created.`
+          : result.skipReason || "No generation work was due.",
+      metadata: {
+        jobId: result.jobId,
+        phase: result.phase,
+        postsCreated: result.postsCreated,
+        sourcesFound: result.sourcesFound,
+      },
+    });
+    return { ...result, operationRunId: operation.id };
   };
+
+  try {
+    while (Date.now() - t0 < budgetMs) {
+      const remaining = budgetMs - (Date.now() - t0);
+      const need = await minMsForNextPhase(userId);
+      if (remaining < need) {
+        log(
+          allLogs,
+          `Budget pause: ${Math.round(remaining / 1000)}s left, need ~${Math.round(need / 1000)}s for next phase — next external cron will continue`,
+        );
+        last = {
+          ...last,
+          continueChain: true,
+          skipReason: `Paused for next cron tick (${phasesRun} phase(s) this run)`,
+          logs: allLogs,
+        };
+        break;
+      }
+
+      const phaseStarted = Date.now();
+      const r = await runOneGenerationPhase(userId);
+      const phaseName = r.phase ?? (r.skipped ? "idle" : "generation");
+      await recordOperationalEvent(operation.id, {
+        stage: phaseName,
+        level: r.skipReason && !r.continueChain && !r.skipped ? "warning" : "info",
+        message: r.postsCreated
+          ? `Phase completed and created ${r.postsCreated} post pack.`
+          : r.skipReason || `Phase ${phaseName} completed.`,
+        durationMs: Date.now() - phaseStarted,
+        metadata: {
+          jobId: r.jobId,
+          sourcesFound: r.sourcesFound,
+          continueChain: r.continueChain,
+        },
+      });
+      if (r.jobId) {
+        await prisma.operationalRun.update({
+          where: { id: operation.id },
+          data: { subjectType: "generation_job", subjectId: r.jobId },
+        });
+      }
+      phasesRun += 1;
+      allLogs.push(...r.logs);
+      postsCreated += r.postsCreated;
+      last = { ...r, logs: allLogs, postsCreated };
+
+      if (r.postsCreated > 0) {
+        log(allLogs, `Done after ${phasesRun} phase(s) in ${Date.now() - t0}ms`);
+        return finish({ ...last, postsCreated, logs: allLogs, continueChain: false });
+      }
+      if (!r.continueChain) {
+        return finish({ ...last, postsCreated, logs: allLogs, continueChain: false });
+      }
+    }
+
+    return finish({
+      ...last,
+      postsCreated,
+      logs: allLogs,
+      continueChain: last.continueChain && postsCreated === 0,
+      phase: last.phase ?? `budget:${phasesRun}`,
+    });
+  } catch (error) {
+    await failOperationalRun(operation.id, error, last.phase ?? "generation");
+    throw error;
+  }
 }
 
 /**
@@ -961,7 +1023,7 @@ export async function runCronPhaseForAllUsers(): Promise<{
 
   for (const user of users) {
     try {
-      const r = await runPhasesWithBudget(user.id, 52_000);
+      const r = await runPhasesWithBudget(user.id, 52_000, { source: "cron" });
       created += r.postsCreated;
       if (r.continueChain) continueChain = true;
       results.push({

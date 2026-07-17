@@ -151,6 +151,32 @@ export async function deleteR2Object(key: string): Promise<void> {
   }
 }
 
+/** Read/write/delete probe used by the authenticated Operations dashboard. */
+export async function probeR2Storage(): Promise<void> {
+  if (!isR2Configured()) throw new Error("R2 storage is not configured");
+  const key = `health/probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`;
+  const c = client();
+  try {
+    await c.send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: key,
+        Body: new Uint8Array([79, 75]),
+        ContentType: "text/plain",
+        ContentLength: 2,
+      }),
+    );
+  } catch (error) {
+    throw new Error(`R2 health probe failed: ${awsErrorMessage(error)}`);
+  } finally {
+    try {
+      await c.send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
+    } catch {
+      // The probe result is still useful; retention can remove a tiny orphan.
+    }
+  }
+}
+
 export async function getR2Object(
   key: string,
 ): Promise<{ body: Uint8Array; contentType: string } | null> {

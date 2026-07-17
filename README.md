@@ -17,6 +17,7 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Distribution engine | [`docs/DISTRIBUTION-ENGINE.md`](./docs/DISTRIBUTION-ENGINE.md) |
 | Campaign orchestration | [`docs/CAMPAIGNS.md`](./docs/CAMPAIGNS.md) |
 | Attribution | [`docs/ATTRIBUTION.md`](./docs/ATTRIBUTION.md) |
+| Production operations | [`docs/OPERATIONS.md`](./docs/OPERATIONS.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -37,6 +38,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 10. Organizes manual distribution, grounded replies, relationships, and audience-driven follow-up content
 11. Coordinates evidence-backed product campaigns with measurable goals and manual review
 12. Measures the privacy-safe funnel from impressions to clicks, conversions, and follower growth
+13. Observes production health, stage timings, cron freshness, and checkpoint-safe recovery
 
 ---
 
@@ -164,11 +166,14 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/distribution` | Daily publishing cycles, ranked conversations, relationships, and content signals |
 | `/campaigns` | Goal-driven product narratives, evidence gates, campaign drafts, and results |
 | `/attribution` | Tracked links, explicit conversions, funnel diagnosis, and CTA evidence |
+| `/operations` | Production service health, runtime history, deployment readiness, and recovery queue |
 | `/r/[slug]` | Public privacy-safe aggregate redirect for user-created tracked links |
 | `/schedule` | Slot timeline |
 | `/settings` | Topics, writing style, cadence, timezone, models |
 | `/api/cron/slot` | Cron: one due-slot generation per user |
 | `/api/generate` | Authenticated manual “generate due slot” |
+| `/api/operations/health` | Authenticated live dependency probes |
+| `/api/operations/recovery` | Authenticated checkpoint-safe retries |
 
 ### Post statuses
 

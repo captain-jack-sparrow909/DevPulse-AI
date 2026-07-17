@@ -3,6 +3,12 @@ import { waitUntil } from "@vercel/functions";
 import { runCronPhaseForAllUsers } from "@/lib/ai/phased-pipeline";
 import { promoteDuePosts } from "@/lib/schedule/promote-ready";
 import { runRetentionCleanup } from "@/lib/maintenance/cleanup";
+import { refreshServiceHealthIfStale } from "@/lib/operations/health";
+import {
+  completeOperationalRun,
+  failOperationalRun,
+  startOperationalRun,
+} from "@/lib/operations/store";
 
 /** Hobby max 60s — we pack several phases into this window (no self-fetch). */
 export const maxDuration = 60;
@@ -56,7 +62,33 @@ async function runCronWork(): Promise<{
     let cleanup: Awaited<ReturnType<typeof runRetentionCleanup>> | undefined;
     // Cleanup only when fully idle (no post and nothing left mid-job)
     if (result.created === 0 && !result.continueChain) {
-      cleanup = await runRetentionCleanup();
+      const cleanupRun = await startOperationalRun({
+        kind: "retention_cleanup",
+        source: "cron",
+        stage: "cleanup",
+      });
+      try {
+        cleanup = await runRetentionCleanup();
+        await completeOperationalRun(cleanupRun.id, {
+          stage: "completed",
+          message: "Retention cleanup completed.",
+          metadata: {
+            postsDeleted: cleanup.postsDeleted,
+            visualAssetsDeleted: cleanup.visualAssetsDeleted,
+            operationalRunsDeleted: cleanup.operationalRunsDeleted,
+          },
+        });
+      } catch (error) {
+        await failOperationalRun(cleanupRun.id, error, "retention_cleanup");
+        throw error;
+      }
+      for (const userResult of result.results) {
+        try {
+          await refreshServiceHealthIfStale(userResult.userId);
+        } catch (error) {
+          console.error("[cron/health]", error instanceof Error ? error.message : error);
+        }
+      }
     }
 
     return {
@@ -79,6 +111,8 @@ async function runCronWork(): Promise<{
             screenshotsDeleted: cleanup.screenshotsDeleted,
             visualAssetsDeleted: cleanup.visualAssetsDeleted,
             attributionWindowsDeleted: cleanup.attributionWindowsDeleted,
+            operationalRunsDeleted: cleanup.operationalRunsDeleted,
+            healthSnapshotsDeleted: cleanup.healthSnapshotsDeleted,
           }
         : undefined,
     };

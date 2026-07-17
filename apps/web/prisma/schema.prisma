@@ -45,6 +45,8 @@ model User {
   campaignMetricSnapshots CampaignMetricSnapshot[]
   trackedLinks            TrackedLink[]
   conversionEvents        ConversionEvent[]
+  operationalRuns         OperationalRun[]
+  serviceHealthSnapshots  ServiceHealthSnapshot[]
 }
 
 model Session {
@@ -792,6 +794,75 @@ model GenerationJob {
   completedAt   DateTime?
 
   @@index([userId, status])
+}
+
+/// One observable production invocation. Generation checkpoints remain in
+/// GenerationJob; this row describes the runtime attempt around that durable
+/// state machine, including retries and stage timings.
+model OperationalRun {
+  id             String             @id @default(cuid())
+  userId         String?
+  user           User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind           String // generation | visual_render | project_sync | health_check | retention_cleanup
+  source         String             @default("system") // cron | manual | recovery | system
+  status         String             @default("running") // running | completed | failed | cancelled
+  stage          String             @default("starting")
+  subjectType    String?
+  subjectId      String?
+  message        String?
+  errorCode      String?
+  errorMessage   String?
+  recoveryAction String?
+  metadataJson   String             @default("{}")
+  attempt        Int                @default(1)
+  retryOfId      String?
+  retryOf        OperationalRun?    @relation("OperationalRetries", fields: [retryOfId], references: [id], onDelete: SetNull)
+  retries        OperationalRun[]   @relation("OperationalRetries")
+  startedAt      DateTime           @default(now())
+  heartbeatAt    DateTime           @default(now())
+  completedAt    DateTime?
+  durationMs     Int?
+  createdAt      DateTime           @default(now())
+  events         OperationalEvent[]
+
+  @@index([userId, status, startedAt])
+  @@index([userId, kind, startedAt])
+  @@index([subjectType, subjectId])
+  @@index([retryOfId])
+}
+
+/// Bounded, privacy-safe stage log. Metadata must contain operational counts
+/// and identifiers only—never secrets, prompts, post bodies, or visitor data.
+model OperationalEvent {
+  id           String         @id @default(cuid())
+  runId        String
+  run          OperationalRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stage        String
+  level        String         @default("info") // info | warning | error
+  message      String
+  durationMs   Int?
+  metadataJson String         @default("{}")
+  occurredAt   DateTime       @default(now())
+
+  @@index([runId, occurredAt])
+  @@index([occurredAt])
+}
+
+/// Latest service probes are retained as snapshots so intermittent production
+/// failures and cron gaps are visible instead of being overwritten.
+model ServiceHealthSnapshot {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service      String // database | ai | r2 | github | visual_renderer | cron | deployment
+  status       String // healthy | degraded | unhealthy | unknown
+  latencyMs    Int?
+  message      String
+  metadataJson String   @default("{}")
+  checkedAt    DateTime @default(now())
+
+  @@index([userId, service, checkedAt])
+  @@index([checkedAt])
 }
 
 model PromptVersion {
