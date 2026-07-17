@@ -47,6 +47,7 @@ model User {
   conversionEvents        ConversionEvent[]
   operationalRuns         OperationalRun[]
   serviceHealthSnapshots  ServiceHealthSnapshot[]
+  weeklyGrowthReviews     WeeklyGrowthReview[]
 }
 
 model Session {
@@ -863,6 +864,55 @@ model ServiceHealthSnapshot {
 
   @@index([userId, service, checkedAt])
   @@index([checkedAt])
+}
+
+/// A deterministic, evidence-bounded review of one seven-day content window.
+/// Generation only creates pending decisions; no strategy mutation occurs until
+/// a person explicitly applies an individual decision.
+model WeeklyGrowthReview {
+  id                String                 @id @default(cuid())
+  userId            String
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekKey           String
+  periodStart       DateTime
+  periodEnd         DateTime
+  comparisonStart   DateTime
+  timezone          String
+  status            String                 @default("draft") // draft | reviewed
+  evidenceJson      String
+  summaryJson       String
+  nextWeekBriefJson String
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  reviewedAt        DateTime?
+  decisions         WeeklyGrowthDecision[]
+
+  @@unique([userId, weekKey])
+  @@index([userId, periodEnd])
+}
+
+/// One of exactly three review decisions: continue, reduce, or test.
+/// appliedResultJson records the explicit effect (if any) for auditability.
+model WeeklyGrowthDecision {
+  id                String             @id @default(cuid())
+  reviewId          String
+  review            WeeklyGrowthReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  category          String // continue | reduce | test
+  priority          Int
+  title             String
+  rationale         String
+  confidence        String             @default("low") // low | medium | high
+  evidenceJson      String
+  actionJson        String
+  status            String             @default("pending") // pending | applied | rejected
+  appliedResultJson String?
+  decidedAt         DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@unique([reviewId, category])
+  @@index([reviewId, priority])
+  @@index([status, createdAt])
 }
 
 model PromptVersion {

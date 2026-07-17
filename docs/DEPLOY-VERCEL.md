@@ -199,3 +199,4 @@ npm run cron:loop    # terminal 2 — every 15 min
 - [ ] Approve → stays in Supabase
 - [ ] **Operations** → Run health checks reports database, AI, R2, GitHub, visual renderer, and deployment status
 - [ ] After one external cron tick, **Operations** reports cron healthy and less than 45 minutes old
+- [ ] **Weekly review** generates three decisions and both PDF and CSV downloads open correctly

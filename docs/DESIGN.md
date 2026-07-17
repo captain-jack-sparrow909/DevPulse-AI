@@ -214,6 +214,14 @@ When a post benefits from media (repos, papers, demos, many LinkedIn posts), Chr
 - Stale invocation detection and checkpoint-safe generation, visual, and repository recovery
 - Thirty-day operations and health history
 
+### Phase 12 — Weekly growth decision engine
+- Persisted seven-day performance cohorts compared with the preceding seven days
+- Funnel, experiment, distribution, campaign, and reliability evidence in one deterministic review
+- Exactly three decisions: continue/increase, stop/reduce, and test next
+- Explicit approval per decision; review generation never mutates strategy
+- One-slot content-mix changes with stale snapshot checks and draft-only experiment proposals
+- Historical next-week briefs with PDF and CSV export
+
 ---
 
 ## 7. Security & quality bars

@@ -416,6 +416,12 @@ Phase 10 — completed
 
 Phase 11 — completed
 - Production health, stage-level operational telemetry, cron monitoring, deployment validation, and checkpoint-safe recovery
+
+Phase 12 — completed
+- Deterministic seven-day growth reviews with prior-period comparison
+- Exactly three approval-gated continue, reduce, and test decisions
+- Safe content-mix changes with stale-review protection and draft-only experiment creation
+- Historical review evidence, next-week briefs, and PDF/CSV exports
 ```
 
 ## One additional recommendation

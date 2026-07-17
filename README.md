@@ -18,6 +18,7 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Campaign orchestration | [`docs/CAMPAIGNS.md`](./docs/CAMPAIGNS.md) |
 | Attribution | [`docs/ATTRIBUTION.md`](./docs/ATTRIBUTION.md) |
 | Production operations | [`docs/OPERATIONS.md`](./docs/OPERATIONS.md) |
+| Weekly growth review | [`docs/WEEKLY-GROWTH.md`](./docs/WEEKLY-GROWTH.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -39,6 +40,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 11. Coordinates evidence-backed product campaigns with measurable goals and manual review
 12. Measures the privacy-safe funnel from impressions to clicks, conversions, and follower growth
 13. Observes production health, stage timings, cron freshness, and checkpoint-safe recovery
+14. Produces an approval-gated weekly continue/reduce/test plan from measured growth evidence
 
 ---
 
@@ -167,6 +169,7 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/campaigns` | Goal-driven product narratives, evidence gates, campaign drafts, and results |
 | `/attribution` | Tracked links, explicit conversions, funnel diagnosis, and CTA evidence |
 | `/operations` | Production service health, runtime history, deployment readiness, and recovery queue |
+| `/growth-review` | Historical seven-day comparisons and approval-gated continue, reduce, and test decisions |
 | `/r/[slug]` | Public privacy-safe aggregate redirect for user-created tracked links |
 | `/schedule` | Slot timeline |
 | `/settings` | Topics, writing style, cadence, timezone, models |
@@ -174,6 +177,7 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/api/generate` | Authenticated manual “generate due slot” |
 | `/api/operations/health` | Authenticated live dependency probes |
 | `/api/operations/recovery` | Authenticated checkpoint-safe retries |
+| `/api/growth-reviews` | Authenticated deterministic weekly evidence snapshot and decision generation |
 
 ### Post statuses
 
