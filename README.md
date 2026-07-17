@@ -281,6 +281,8 @@ DevPulse AI/
 | 13 | Done | Comparable checkpoint queues, quality audits, follower observations and idempotent imports |
 | 14 | Done | Approval-gated seven-day anchor plans, calendar export and generation handoff |
 | 15 | Done | Adaptive platform cadence, publishing quality gates, cooldowns, measured timing and daily command center |
+| 16 | Done | Production readiness endpoint, smoke checks, safe error boundaries, security headers and query indexes |
+| 17 | Done | Persisted 30-day validation study, evidence checkpoints and sample-gated strategy recommendations |
 
 ---
 

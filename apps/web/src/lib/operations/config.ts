@@ -11,6 +11,16 @@ function present(env: NodeJS.ProcessEnv, key: string): boolean {
   return Boolean(env[key]?.trim());
 }
 
+function isLocalUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const hostname = new URL(value).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
 export function validateDeploymentEnvironment(
   env: NodeJS.ProcessEnv = process.env,
 ): DeploymentConfigCheck[] {
@@ -41,9 +51,9 @@ export function validateDeploymentEnvironment(
     {
       key: "app_url",
       label: "Production URLs",
-      status: appUrl && authUrl && appUrl === authUrl && (!production || appUrl.startsWith("https://")) ? "ready" : "missing",
+      status: appUrl && authUrl && appUrl === authUrl && (!production || appUrl.startsWith("https://") || isLocalUrl(appUrl)) ? "ready" : "missing",
       message: appUrl && authUrl && appUrl === authUrl
-        ? production && !appUrl.startsWith("https://") ? "Production URLs must use HTTPS." : "Auth and public application URLs match."
+        ? production && !appUrl.startsWith("https://") && !isLocalUrl(appUrl) ? "Production URLs must use HTTPS." : "Auth and public application URLs match."
         : "BETTER_AUTH_URL and NEXT_PUBLIC_APP_URL must both exist and match.",
     },
     {

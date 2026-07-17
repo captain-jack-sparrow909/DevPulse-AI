@@ -51,6 +51,7 @@ model User {
   followerCheckpoints     FollowerCheckpoint[]
   performanceImportRuns   PerformanceImportRun[]
   weeklyExecutionPlans    WeeklyExecutionPlan[]
+  growthValidationStudies GrowthValidationStudy[]
 }
 
 model Session {
@@ -351,8 +352,8 @@ model Post {
   conversionEvents             ConversionEvent[]
   executionPlanItem            ExecutionPlanItem?
 
-  @@index([userId, status])
   @@index([userId, createdAt])
+  @@index([userId, status, createdAt])
   @@index([contentHash])
   @@index([platform])
   @@index([experimentVariantId])
@@ -489,6 +490,7 @@ model SocialPerformanceSnapshot {
   createdAt       DateTime @default(now())
 
   @@index([userId, capturedAt])
+  @@index([userId, platform, capturedAt])
   @@index([postId, platform, capturedAt])
   @@index([userId, checkpoint, capturedAt])
   @@index([userId, importKey])
@@ -608,6 +610,7 @@ model DistributionWorkflow {
 
   @@unique([postId, platform])
   @@index([userId, status, updatedAt])
+  @@index([userId, platform, status, updatedAt])
 }
 
 /// A question, objection, or idea captured from a real audience conversation.
@@ -813,7 +816,7 @@ model Schedule {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@index([scheduledFor, status])
+  @@index([scheduledFor, status, slotIndex])
 }
 
 /// Tracks human approval + readiness for manual posting (never auto-posts to social APIs).
@@ -1030,6 +1033,53 @@ model WeeklyGrowthDecision {
   @@unique([reviewId, category])
   @@index([reviewId, priority])
   @@index([status, createdAt])
+}
+
+/// A fixed 30-day validation window for the adaptive publishing strategy.
+/// Recommendations are evidence only; they never mutate publishing settings.
+model GrowthValidationStudy {
+  id                   String                       @id @default(cuid())
+  userId               String
+  user                 User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                 String                       @default("30-day adaptive publishing validation")
+  status               String                       @default("active") // active | completed | cancelled
+  timezone             String
+  periodStart          DateTime
+  periodEnd            DateTime
+  baselineJson         String
+  targetsJson          String
+  settingsSnapshotJson String
+  currentSummaryJson   String                       @default("{}")
+  recommendationsJson  String                       @default("[]")
+  conclusionJson       String                       @default("{}")
+  startedAt            DateTime                     @default(now())
+  completedAt          DateTime?
+  cancelledAt          DateTime?
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  checkpoints          GrowthValidationCheckpoint[]
+
+  @@index([userId, status, periodStart])
+  @@index([userId, periodEnd])
+}
+
+/// Immutable evidence captured at each study boundary.
+model GrowthValidationCheckpoint {
+  id                  String                @id @default(cuid())
+  studyId             String
+  study               GrowthValidationStudy @relation(fields: [studyId], references: [id], onDelete: Cascade)
+  sequence            Int
+  label               String
+  scheduledFor        DateTime
+  status              String                @default("pending") // pending | captured | missed
+  metricsJson         String                @default("{}")
+  recommendationsJson String                @default("[]")
+  capturedAt          DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@unique([studyId, sequence])
+  @@index([scheduledFor, status])
 }
 
 model PromptVersion {

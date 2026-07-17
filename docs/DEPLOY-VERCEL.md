@@ -203,6 +203,8 @@ npm run cron:loop    # terminal 2 — every 15 min
 ## 6. Post-deploy checklist
 
 - [ ] Deploy succeeds (no cron config error)
+- [ ] `/api/ready` returns `ready` or `degraded` with HTTP 200
+- [ ] `npm run smoke -- https://<production-domain>` passes all three routes
 - [ ] `BETTER_AUTH_URL` / `NEXT_PUBLIC_APP_URL` = production URL
 - [ ] `/register` works
 - [ ] External cron **Run now** returns `ok: true`
@@ -213,3 +215,4 @@ npm run cron:loop    # terminal 2 — every 15 min
 - [ ] **Weekly review** generates three decisions and both PDF and CSV downloads open correctly
 - [ ] **Analytics** shows checkpoint coverage, accepts a follower checkpoint, and skips a repeated CSV import
 - [ ] **Execution plan** creates seven anchors, stays locked before review decisions, exports `.ics`, and only guides generation after approval
+- [ ] **30-day validation** captures a baseline and shows the day 7 checkpoint as pending

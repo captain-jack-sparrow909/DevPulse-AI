@@ -25,6 +25,7 @@ import {
   TrendingUp,
   CalendarCheck2,
   ListChecks,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -47,6 +48,7 @@ const nav = [
   { href: "/operations", label: "Operations", icon: ServerCog },
   { href: "/growth-review", label: "Weekly review", icon: TrendingUp },
   { href: "/execution", label: "Execution plan", icon: CalendarCheck2 },
+  { href: "/validation", label: "30-day validation", icon: Target },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

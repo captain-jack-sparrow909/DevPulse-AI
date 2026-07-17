@@ -7,7 +7,7 @@ import { classifyOperationalError } from "@/lib/operations/store";
 test("deployment validation never returns secret values", () => {
   const secret = "x".repeat(40);
   const checks = validateDeploymentEnvironment({
-    NODE_ENV: "production",
+    NODE_ENV: "production" as const,
     VERCEL: "1",
     DATABASE_URL: "postgresql://example:6543/db",
     BETTER_AUTH_SECRET: secret,
@@ -23,6 +23,23 @@ test("deployment validation never returns secret values", () => {
   });
   assert.ok(checks.every((check) => check.status === "ready"));
   assert.doesNotMatch(JSON.stringify(checks), new RegExp(secret));
+});
+
+test("local production smoke URLs may use HTTP but remote production URLs may not", () => {
+  const base = {
+    NODE_ENV: "production" as const,
+    DATABASE_URL: "postgresql://example:6543/db",
+    BETTER_AUTH_SECRET: "x".repeat(40),
+    CRON_SECRET: "x",
+    CLOUDFLARE_S3_ENDPOINT: "https://example.r2.cloudflarestorage.com",
+    CLOUDFLARE_ACCESS_KEY_ID: "x",
+    CLOUDFLARE_SECRET_ACCESS_KEY: "x",
+    R2_BUCKET: "assets",
+  };
+  const local = validateDeploymentEnvironment({ ...base, BETTER_AUTH_URL: "http://localhost:3100", NEXT_PUBLIC_APP_URL: "http://localhost:3100" });
+  const remote = validateDeploymentEnvironment({ ...base, BETTER_AUTH_URL: "http://devpulse.example", NEXT_PUBLIC_APP_URL: "http://devpulse.example" });
+  assert.equal(local.find((item) => item.key === "app_url")?.status, "ready");
+  assert.equal(remote.find((item) => item.key === "app_url")?.status, "missing");
 });
 
 test("latest health keeps only the newest snapshot for each service", () => {

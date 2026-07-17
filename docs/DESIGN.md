@@ -251,6 +251,19 @@ When a post benefits from media (repos, papers, demos, many LinkedIn posts), Chr
 - Posting-hour recommendations learned from comparable platform snapshots
 - Publishing command center ranks the best eligible draft and explains every holdback
 
+### Phase 16 — Production hardening
+- Cheap unauthenticated `/api/ready` probe with a real database query and secret-safe configuration state
+- Global and authenticated-workspace error boundaries with retry paths
+- Baseline security headers and composite indexes for frequent publishing and measurement queries
+- Repeatable `npm run smoke -- <base-url>` check for the landing page, login, and readiness
+
+### Phase 17 — 30-day growth validation
+- Immutable settings and previous-30-day baseline captured when the study starts
+- Persisted baseline, day 7, 14, 21, and day 30 checkpoints
+- Separate X and LinkedIn publication, measurement, engagement, traffic, and follower evidence
+- Quality changes blocked until minimum post and impression samples exist
+- Recommendations remain advisory and never mutate thresholds, cooldowns, or cadence
+
 ---
 
 ## 7. Security & quality bars
