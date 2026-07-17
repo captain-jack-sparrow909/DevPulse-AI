@@ -30,6 +30,7 @@ export function PostActions({
 }) {
   const router = useRouter();
   const [linkedIn, setLinkedIn] = useState(initialLinkedIn);
+  const [currentStatus, setCurrentStatus] = useState(status);
   const [xParts, setXParts] = useState<string[]>(
     initialXThread.length ? initialXThread : splitIntoXChunks(initialLinkedIn),
   );
@@ -71,8 +72,10 @@ export function PostActions({
             /* keep local */
           }
         }
+        const nextStatus = data.post?.status || data.status;
+        if (typeof nextStatus === "string") setCurrentStatus(nextStatus);
+        if (action === "recapture_image" || action === "clear_image") router.refresh();
       }
-      router.refresh();
     } catch {
       setMessage("Network error");
     } finally {
@@ -128,12 +131,11 @@ export function PostActions({
     setBusy("delete");
     await fetch(`/api/posts/${postId}`, { method: "DELETE" });
     router.push("/posts");
-    router.refresh();
   }
 
-  const canApprove = ["draft", "pending_review"].includes(status);
-  const canReady = ["approved", "scheduled", "pending_review"].includes(status);
-  const canMarkPosted = ["ready", "scheduled", "approved"].includes(status);
+  const canApprove = ["draft", "pending_review"].includes(currentStatus);
+  const canReady = ["approved", "scheduled", "pending_review"].includes(currentStatus);
+  const canMarkPosted = ["ready", "scheduled", "approved"].includes(currentStatus);
 
   return (
     <div className="space-y-6">
@@ -321,7 +323,7 @@ export function PostActions({
             </Button>
           </>
         )}
-        {canReady && status !== "ready" && (
+        {canReady && currentStatus !== "ready" && (
           <Button
             variant="secondary"
             className="w-full sm:w-auto"

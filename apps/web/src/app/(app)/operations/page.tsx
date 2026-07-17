@@ -4,24 +4,22 @@ import { PageHeader } from "@/components/page-header";
 import { OperationsDashboard } from "@/components/operations-dashboard";
 import { buildOperationsReport } from "@/lib/operations/report";
 import { validateDeploymentEnvironment } from "@/lib/operations/config";
-import { markStaleOperationalWork } from "@/lib/operations/recovery";
 
 export default async function OperationsPage() {
   const session = await requireUser();
   const userId = session.user.id;
-  await markStaleOperationalWork(userId);
 
   const [runs, health, failedJobs, failedVisuals, failedRepositories] = await Promise.all([
     prisma.operationalRun.findMany({
       where: { userId },
-      include: { events: { orderBy: { occurredAt: "asc" }, take: 30 } },
+      include: { events: { orderBy: { occurredAt: "asc" }, take: 15 } },
       orderBy: { startedAt: "desc" },
-      take: 100,
+      take: 30,
     }),
     prisma.serviceHealthSnapshot.findMany({
       where: { userId },
       orderBy: { checkedAt: "desc" },
-      take: 100,
+      take: 40,
     }),
     prisma.generationJob.findMany({
       where: { userId, status: "failed" },

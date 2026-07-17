@@ -907,16 +907,20 @@ async function minMsForNextPhase(userId: string): Promise<number> {
 export async function runPhasesWithBudget(
   userId: string,
   budgetMs = 52_000,
-  context: { source?: OperationSource; retryOfId?: string } = {},
+  context: {
+    source?: OperationSource;
+    retryOfId?: string;
+    operation?: { id: string; startedAt: Date };
+  } = {},
 ): Promise<PhaseResult> {
-  const operation = await startOperationalRun({
-    userId,
-    kind: "generation",
-    source: context.source ?? "system",
-    stage: "generation",
-    retryOfId: context.retryOfId,
-    metadata: { budgetMs },
-  });
+  const operation = context.operation ?? await startOperationalRun({
+      userId,
+      kind: "generation",
+      source: context.source ?? "system",
+      stage: "generation",
+      retryOfId: context.retryOfId,
+      metadata: { budgetMs },
+    });
   const t0 = Date.now();
   const allLogs: string[] = [];
   let last: PhaseResult = {
@@ -932,6 +936,12 @@ export async function runPhasesWithBudget(
 
   const finish = async (result: PhaseResult): Promise<PhaseResult> => {
     const stage = result.continueChain ? "checkpoint_saved" : result.phase ?? "completed";
+    if (result.jobId) {
+      await prisma.operationalRun.update({
+        where: { id: operation.id },
+        data: { subjectType: "generation_job", subjectId: result.jobId },
+      });
+    }
     await completeOperationalRun(operation.id, {
       stage,
       message: result.continueChain

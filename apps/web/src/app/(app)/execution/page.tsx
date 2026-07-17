@@ -32,7 +32,7 @@ export default async function ExecutionPage() {
       },
     },
     orderBy: { periodStart: "desc" },
-    take: 12,
+    take: 4,
   });
 
   return (

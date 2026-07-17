@@ -4,8 +4,9 @@ import { prisma } from "@/lib/db";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
-    provider: "sqlite",
+    provider: "postgresql",
   }),
+  experimental: { joins: true },
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
@@ -16,6 +17,11 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60,
+      strategy: "compact",
+    },
   },
   trustedOrigins: [process.env.BETTER_AUTH_URL || "http://localhost:3000"],
   secret: process.env.BETTER_AUTH_SECRET,

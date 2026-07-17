@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { waitForGeneration } from "@/lib/client/generation-progress";
 
 export function GeneratePanel({
   aiReady,
@@ -48,19 +49,20 @@ export function GeneratePanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ platforms: selected, allowEarly }),
       });
-      const data = await res.json();
+      const data = await res.json() as { error?: string; operationRunId?: string };
       if (!res.ok) {
         setError(data.error || "Generation failed");
-        setLogs((l) => [...l, ...(data.logs || [data.error || "failed"])]);
-      } else {
-        setLogs(data.logs || []);
-        if (data.skipped) {
-          setResult(data.skipReason || "Nothing to generate right now.");
-        } else {
-          setResult(
-            `Created 1 post for slot ${(data.slotIndex ?? 0) + 1} from ${data.sourcesFound} live sources. Review it, then wait for the next slot for a fresh research run.`,
-          );
-        }
+        setLogs((current) => [...current, data.error || "failed"]);
+      } else if (data.operationRunId) {
+        setResult("Generation accepted. You can leave this page; the job will continue in the background.");
+        const completed = await waitForGeneration(data.operationRunId, (progress) => {
+          setLogs(progress.logs);
+          setResult(`Background generation: ${progress.phase.replaceAll("_", " ")}…`);
+        });
+        if (completed.status === "failed") throw new Error(completed.error || "Generation failed");
+        setResult(completed.postsCreated
+          ? "Created 1 post pack. It is ready for review."
+          : completed.message || "Generation checkpoint saved; cron can continue it.");
         router.refresh();
       }
     } catch (e) {

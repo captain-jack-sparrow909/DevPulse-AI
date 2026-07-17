@@ -70,12 +70,14 @@ export async function startOperationalRun(input: {
       retryOfId: input.retryOfId,
       attempt,
       metadataJson: safeMetadata(input.metadata),
+      events: {
+        create: {
+          stage: input.stage ?? "starting",
+          message: `${input.kind.replaceAll("_", " ")} started`,
+          metadataJson: safeMetadata(input.metadata),
+        },
+      },
     },
-  });
-  await recordOperationalEvent(run.id, {
-    stage: run.stage,
-    message: `${input.kind.replaceAll("_", " ")} started`,
-    metadata: input.metadata,
   });
   return run;
 }
@@ -108,6 +110,36 @@ export async function recordOperationalEvent(
     }),
   ]);
   return event;
+}
+
+export async function recordOperationalEvents(
+  runId: string,
+  inputs: Array<{
+    stage: string;
+    level?: "info" | "warning" | "error";
+    message: string;
+    durationMs?: number;
+    metadata?: Record<string, unknown>;
+  }>,
+) {
+  if (!inputs.length) return;
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.operationalEvent.createMany({
+      data: inputs.map((input) => ({
+        runId,
+        stage: input.stage,
+        level: input.level ?? "info",
+        message: input.message.slice(0, 2_000),
+        durationMs: input.durationMs,
+        metadataJson: safeMetadata(input.metadata),
+      })),
+    }),
+    prisma.operationalRun.update({
+      where: { id: runId },
+      data: { stage: inputs[inputs.length - 1]!.stage, heartbeatAt: now },
+    }),
+  ]);
 }
 
 export async function completeOperationalRun(

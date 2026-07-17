@@ -80,7 +80,7 @@ export default async function AnalyticsPage() {
     prisma.socialPerformanceSnapshot.findMany({
       where: { userId },
       orderBy: { capturedAt: "desc" },
-      take: 500,
+      take: 250,
       include: {
         post: {
           select: {
@@ -108,7 +108,7 @@ export default async function AnalyticsPage() {
     prisma.post.findMany({
       where: { userId, status: "posted_manually" },
       orderBy: { postedManuallyAt: "desc" },
-      take: 30,
+      take: 20,
       select: {
         id: true,
         title: true,
@@ -117,8 +117,8 @@ export default async function AnalyticsPage() {
         performanceSnapshots: { orderBy: { capturedAt: "asc" } },
       },
     }),
-    prisma.followerCheckpoint.findMany({ where: { userId }, orderBy: { capturedAt: "desc" }, take: 50 }),
-    prisma.performanceImportRun.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.followerCheckpoint.findMany({ where: { userId }, orderBy: { capturedAt: "desc" }, take: 30 }),
+    prisma.performanceImportRun.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 10 }),
   ]);
   const records = snapshots
     .filter((snapshot) => snapshot.platform === "x" || snapshot.platform === "linkedin")

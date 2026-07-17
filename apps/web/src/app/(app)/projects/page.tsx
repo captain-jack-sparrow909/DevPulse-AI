@@ -1,6 +1,5 @@
 import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { ensureOwnedRepositories } from "@/lib/projects/repositories";
 import { PageHeader } from "@/components/page-header";
 import { ProjectIntelligence } from "@/components/project-intelligence";
 
@@ -15,7 +14,6 @@ function parseFiles(value: string): string[] {
 
 export default async function ProjectsPage() {
   const session = await requireUser();
-  await ensureOwnedRepositories(session.user.id);
   const [repositories, facts, ignoredChanges] = await Promise.all([
     prisma.ownedRepository.findMany({
       where: { userId: session.user.id },

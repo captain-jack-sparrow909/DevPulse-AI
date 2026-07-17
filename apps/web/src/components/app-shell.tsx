@@ -67,6 +67,7 @@ function NavLinks({
           <Link
             key={item.href}
             href={item.href}
+            prefetch={false}
             onClick={onNavigate}
             className={cn(
               "group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-all duration-150",
@@ -97,6 +98,7 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
     <div className="space-y-1 border-t border-white/[0.06] p-3">
       <Link
         href="/posts"
+        prefetch={false}
         onClick={onNavigate}
         className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-zinc-100"
       >

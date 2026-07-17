@@ -66,7 +66,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 |-------|--------|
 | App | Next.js 16, React 19, Tailwind |
 | Auth | Better Auth (email / password) |
-| DB | SQLite locally · Postgres / Supabase later |
+| DB | Postgres / Supabase |
 | ORM | Prisma 5 |
 | AI | DeepSeek (OpenAI-compatible); demo mode without a key |
 | Research | Owned projects + selective GitHub/RSS, arXiv/Hugging Face, and limited HN/Reddit |
@@ -101,7 +101,10 @@ Open [http://localhost:3000](http://localhost:3000).
 See [`apps/web/.env.example`](./apps/web/.env.example) for all variables. Important ones:
 
 ```env
-DATABASE_URL="file:./dev.db"
+# Vercel/runtime: Supavisor transaction pooler on port 6543
+DATABASE_URL="postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=2&pool_timeout=30&sslmode=require"
+# Local runtime + Prisma commands: Supavisor session pooler on port 5432
+DIRECT_URL="postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres?sslmode=require"
 BETTER_AUTH_SECRET="long-random-secret"
 BETTER_AUTH_URL="http://localhost:3000"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
@@ -151,7 +154,9 @@ Use a free external cron (cron-job.org or GitHub Actions) every **15 minutes** �
 `GET /api/cron/slot` + header `Authorization: Bearer $CRON_SECRET`.  
 Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 
-**Supabase free tier:** use the Supavisor transaction pooler for `DATABASE_URL` (`:6543`) and session pooler for `DIRECT_URL` (`:5432`). The direct `db.…:5432` host requires IPv6 or Supabase's IPv4 add-on. Optional UI flag **Allow early** can draft the next unfilled slot before its clock time.
+**Supabase free tier:** use the Supavisor transaction pooler for `DATABASE_URL` (`:6543`, two connections per serverless instance) and session pooler for `DIRECT_URL` (`:5432`). Production automatically uses the transaction pool; local development prefers the session URL. The direct `db.…:5432` host requires IPv6 or Supabase's IPv4 add-on. Optional UI flag **Allow early** can draft the next unfilled slot before its clock time.
+
+Manual generation is asynchronous: `/api/generate` returns `202` immediately, the UI polls the operational run, and the long research/write work continues through `waitUntil`. This keeps the request responsive without changing the manual review boundary.
 
 ---
 

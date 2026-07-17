@@ -9,7 +9,7 @@ export default async function GrowthReviewPage() {
     where: { userId: session.user.id },
     include: { decisions: { orderBy: { priority: "asc" } } },
     orderBy: { periodEnd: "desc" },
-    take: 12,
+    take: 8,
   });
 
   return (

@@ -4,8 +4,6 @@ import { PageHeader } from "@/components/page-header";
 import { DistributionWorkspace } from "@/components/distribution-workspace";
 import {
   buildDistributionComparison,
-  ensureCreatorRelationships,
-  ensureDistributionWorkflows,
   nextWorkflowAction,
   type WorkflowAction,
 } from "@/lib/distribution/service";
@@ -31,7 +29,6 @@ function actionKey(workflow: {
 export default async function DistributionPage() {
   const session = await requireUser();
   const userId = session.user.id;
-  await Promise.all([ensureDistributionWorkflows(userId), ensureCreatorRelationships(userId)]);
   const [workflows, opportunities, relationships, signals, snapshots, allWorkflows] = await Promise.all([
     prisma.distributionWorkflow.findMany({
       where: { userId, status: { not: "completed" } },
@@ -65,10 +62,11 @@ export default async function DistributionPage() {
       orderBy: { createdAt: "desc" },
       take: 30,
     }),
-    prisma.socialPerformanceSnapshot.findMany({ where: { userId }, orderBy: { capturedAt: "desc" }, take: 500 }),
+    prisma.socialPerformanceSnapshot.findMany({ where: { userId }, orderBy: { capturedAt: "desc" }, take: 250 }),
     prisma.distributionWorkflow.findMany({
       where: { userId },
       select: { postId: true, platform: true, preEngagedAt: true },
+      take: 500,
     }),
   ]);
 

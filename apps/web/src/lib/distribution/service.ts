@@ -1,5 +1,31 @@
 import { prisma } from "@/lib/db";
 
+export async function ensureDistributionWorkflowsForPost(userId: string, postId: string) {
+  const post = await prisma.post.findFirst({
+    where: { id: postId, userId },
+    select: { id: true, status: true, postedManuallyAt: true },
+  });
+  if (!post || !["approved", "scheduled", "ready", "posted_manually"].includes(post.status)) return;
+  const published = post.status === "posted_manually";
+  await Promise.all(
+    (["x", "linkedin"] as const).map((platform) =>
+      prisma.distributionWorkflow.upsert({
+        where: { postId_platform: { postId, platform } },
+        create: {
+          userId,
+          postId,
+          platform,
+          status: published ? "published" : "planned",
+          publishedAt: published ? post.postedManuallyAt ?? new Date() : null,
+        },
+        update: published
+          ? { status: "published", publishedAt: post.postedManuallyAt ?? undefined }
+          : {},
+      }),
+    ),
+  );
+}
+
 export async function ensureDistributionWorkflows(userId: string) {
   const posts = await prisma.post.findMany({
     where: {

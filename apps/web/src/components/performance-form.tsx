@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +41,7 @@ export function PerformanceForm({
   postId: string;
   snapshots: PerformanceSnapshotView[];
 }) {
-  const router = useRouter();
+  const [localSnapshots, setLocalSnapshots] = useState(snapshots);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [platform, setPlatform] = useState<"x" | "linkedin">("x");
@@ -58,9 +57,9 @@ export function PerformanceForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, platform, checkpoint }),
       });
-      const data = await response.json();
+      const data = await response.json() as { error?: string; snapshot?: PerformanceSnapshotView };
       if (!response.ok) throw new Error(data.error || "Could not save metrics");
-      router.refresh();
+      if (data.snapshot) setLocalSnapshots((current) => [data.snapshot!, ...current]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save metrics");
     } finally {
@@ -127,10 +126,10 @@ export function PerformanceForm({
         <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">
           Snapshot history
         </div>
-        {snapshots.length === 0 && (
+        {localSnapshots.length === 0 && (
           <p className="text-sm text-zinc-500">No performance recorded yet.</p>
         )}
-        {snapshots.slice(0, 8).map((snapshot) => {
+        {localSnapshots.slice(0, 8).map((snapshot) => {
           const engagementRate = snapshot.impressions
             ? (actions(snapshot) / snapshot.impressions) * 100
             : 0;

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { AlertTriangle, CheckCircle2, Clock3, DatabaseZap, Gauge, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -48,12 +47,12 @@ const taskStyle = {
 };
 
 export function MeasurementDashboard({ now, coverage, tasks, alerts, followerCheckpoints, imports }: Props) {
-  const router = useRouter();
+  const [localFollowerCheckpoints, setLocalFollowerCheckpoints] = useState(followerCheckpoints);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const activeTasks = tasks.filter((task) => ["upcoming", "due", "overdue"].includes(task.status)).slice(0, 24);
   const followerState = (["x", "linkedin"] as const).map((platform) => {
-    const rows = followerCheckpoints.filter((item) => item.platform === platform);
+    const rows = localFollowerCheckpoints.filter((item) => item.platform === platform);
     const latest = rows[0] ?? null;
     const previous = rows[1] ?? null;
     return {
@@ -73,10 +72,10 @@ export function MeasurementDashboard({ now, coverage, tasks, alerts, followerChe
         headers: { "content-type": "application/json" },
         body: JSON.stringify(Object.fromEntries(formData.entries())),
       });
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as { error?: string; checkpoint?: Props["followerCheckpoints"][number] };
       if (!response.ok) throw new Error(data.error || "Could not save follower checkpoint");
+      if (data.checkpoint) setLocalFollowerCheckpoints((current) => [data.checkpoint!, ...current]);
       setNotice("Follower checkpoint saved.");
-      router.refresh();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not save follower checkpoint");
     } finally {
@@ -124,8 +123,8 @@ export function MeasurementDashboard({ now, coverage, tasks, alerts, followerChe
             </form>
             <div className="space-y-2 border-t border-white/[0.06] pt-3">
               {followerState.map((item) => <div key={item.platform} className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2"><div className="flex items-center justify-between"><span className="text-xs text-zinc-500">{item.platform === "x" ? "X" : "LinkedIn"} daily</span><Badge className={item.due ? taskStyle.overdue : taskStyle.completed}>{item.due ? "due" : "current"}</Badge></div><p className="mt-1 font-mono text-sm text-zinc-200">{item.latest ? item.latest.followers.toLocaleString() : "—"}{item.delta != null ? ` (${item.delta >= 0 ? "+" : ""}${item.delta})` : ""}</p></div>)}
-              {followerCheckpoints.slice(0, 6).map((item) => <div key={item.id} className="flex items-center justify-between text-xs"><span className="text-zinc-500">{item.platform === "x" ? "X" : "LinkedIn"} · {new Date(item.capturedAt).toLocaleDateString()}</span><span className="font-mono text-zinc-200">{item.followers.toLocaleString()}</span></div>)}
-              {!followerCheckpoints.length && <p className="text-xs text-zinc-600">No account checkpoints yet.</p>}
+              {localFollowerCheckpoints.slice(0, 6).map((item) => <div key={item.id} className="flex items-center justify-between text-xs"><span className="text-zinc-500">{item.platform === "x" ? "X" : "LinkedIn"} · {new Date(item.capturedAt).toLocaleDateString()}</span><span className="font-mono text-zinc-200">{item.followers.toLocaleString()}</span></div>)}
+              {!localFollowerCheckpoints.length && <p className="text-xs text-zinc-600">No account checkpoints yet.</p>}
             </div>
           </CardContent>
         </Card>

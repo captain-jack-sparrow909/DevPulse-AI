@@ -35,7 +35,7 @@ In **Project → Settings → Environment Variables**, add for **Production**:
 
 | Name | Notes |
 |------|--------|
-| `DATABASE_URL` | Prefer Supabase **pooler** `:6543` (`…pooler.supabase.com:6543/…?pgbouncer=true&connection_limit=5&sslmode=require`). **Do not** use only `db.…supabase.co:5432` on Vercel — cron will fail with “Can't reach database server”. |
+| `DATABASE_URL` | Prefer Supabase **transaction pooler** `:6543` (`…pooler.supabase.com:6543/…?pgbouncer=true&connection_limit=2&pool_timeout=30&sslmode=require`). **Do not** use only `db.…supabase.co:5432` on Vercel — cron will fail with “Can't reach database server”. |
 | `DATABASE_URL_POOLED` | Optional backup of the pooler URL. On Vercel the app prefers this if set. |
 | `DIRECT_URL` | Supavisor **session pooler** `:5432` for `prisma db push`. Use the direct `db.…:5432` URL only with IPv6 or Supabase's IPv4 add-on. |
 | `BETTER_AUTH_SECRET` | Long random string (≥32 chars) |
@@ -76,7 +76,7 @@ Vercel is using the **direct** host. Serverless often cannot reach it reliably.
 2. Pick **Transaction pooler** (port **6543**), not Direct
 3. On Vercel set `DATABASE_URL` (and optionally `DATABASE_URL_POOLED`) to that pooler URI with:
 
-   `?pgbouncer=true&connection_limit=5&sslmode=require`
+   `?pgbouncer=true&connection_limit=2&pool_timeout=30&sslmode=require`
 
 4. Confirm the project is **not paused** (Restore if needed)
 5. Redeploy, then **Execute now** on cron-job.org
@@ -140,6 +140,17 @@ Optional query fallback if custom headers are awkward:
 `https://YOUR-APP.vercel.app/api/cron/slot?secret=YOUR_CRON_SECRET`
 
 Local debug only: `?wait=1` or env `CRON_SYNC=1` waits for full generation (not for cron-job.org).
+
+### Manual generation behavior
+
+The authenticated `POST /api/generate` endpoint also returns **202 immediately**. The Generate and slot-board UIs poll `GET /api/generate?operationRunId=…` for phase, log, and completion updates while the pipeline continues through `waitUntil`. Do not put a long client timeout in front of this endpoint.
+
+### Performance deployment checklist
+
+- Keep Vercel functions and Supabase in the same geographic region; this is the largest remaining latency lever.
+- Use the transaction pooler on Vercel and keep `connection_limit=2` to avoid a connection burst from parallel server-component queries.
+- Keep the session pooler on `DIRECT_URL` for local development and Prisma schema commands.
+- Redeploy after changing any database URL so warm functions do not retain the previous Prisma client.
 
 ### Option B — EasyCron / cron-job.net / GitHub Actions
 

@@ -9,7 +9,6 @@ import { PostActions } from "@/components/post-actions";
 import { CopyIconButton } from "@/components/copy-icon-button";
 import { parseJsonArray } from "@/lib/utils";
 import { format } from "date-fns";
-import { promoteDuePosts } from "@/lib/schedule/promote-ready";
 import { resolveDualContent } from "@/lib/content/platforms";
 import { PerformanceForm } from "@/components/performance-form";
 import { VisualStudio } from "@/components/visual-studio";
@@ -22,7 +21,6 @@ export default async function PostDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await requireUser();
-  await promoteDuePosts(session.user.id);
   const { id } = await params;
 
   const post = await prisma.post.findFirst({

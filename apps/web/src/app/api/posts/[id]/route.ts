@@ -8,6 +8,7 @@ import { capturePageScreenshot, shouldIncludeImage } from "@/lib/screenshots/cap
 import { enforceXLimit, parseThreadJson } from "@/lib/content/platforms";
 import { parseVariantConfig } from "@/lib/experiments/definitions";
 import { deleteVisualFile } from "@/lib/visuals/storage";
+import { ensureDistributionWorkflowsForPost } from "@/lib/distribution/service";
 
 async function getUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -131,6 +132,7 @@ export async function PATCH(
       data: { status: nextStatus },
       include: { schedule: true, readinessJobs: true },
     });
+    await ensureDistributionWorkflowsForPost(user.id, id);
     return NextResponse.json(updated);
   }
 
@@ -173,6 +175,7 @@ export async function PATCH(
       where: { id },
       data: { status: "ready" },
     });
+    await ensureDistributionWorkflowsForPost(user.id, id);
     return NextResponse.json(updated);
   }
 
@@ -221,6 +224,7 @@ export async function PATCH(
         postedManuallyAt: new Date(),
       },
     });
+    await ensureDistributionWorkflowsForPost(user.id, id);
     return NextResponse.json({ post: updated, policy });
   }
 

@@ -9,6 +9,7 @@ import {
   failOperationalRun,
   startOperationalRun,
 } from "@/lib/operations/store";
+import { markStaleOperationalWork } from "@/lib/operations/recovery";
 
 /** Hobby max 60s — we pack several phases into this window (no self-fetch). */
 export const maxDuration = 60;
@@ -58,6 +59,13 @@ async function runCronWork(): Promise<{
   try {
     const result = await runCronPhaseForAllUsers();
     await promoteDuePosts();
+    await Promise.all(
+      result.results.map((userResult) =>
+        markStaleOperationalWork(userResult.userId).catch((error) => {
+          console.error("[cron/stale-work]", error instanceof Error ? error.message : error);
+        }),
+      ),
+    );
 
     let cleanup: Awaited<ReturnType<typeof runRetentionCleanup>> | undefined;
     // Cleanup only when fully idle (no post and nothing left mid-job)

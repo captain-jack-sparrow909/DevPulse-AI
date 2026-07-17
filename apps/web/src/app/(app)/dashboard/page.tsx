@@ -8,22 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
 import { isAiConfigured } from "@/lib/ai/client";
 import { formatDistanceToNow } from "date-fns";
-import { promoteDuePosts } from "@/lib/schedule/promote-ready";
 import { ArrowRight, Clock3, FileText, Sparkles, Zap } from "lucide-react";
 
 export default async function DashboardPage() {
   const session = await requireUser();
   const userId = session.user.id;
-  await promoteDuePosts(userId);
-
-  // Sequential-ish batches avoid pool exhaustion on small Supabase free-tier pools
-  const [total, pending, ready, posted] = await Promise.all([
-    prisma.post.count({ where: { userId } }),
-    prisma.post.count({ where: { userId, status: "pending_review" } }),
-    prisma.post.count({ where: { userId, status: "ready" } }),
-    prisma.post.count({ where: { userId, status: "posted_manually" } }),
-  ]);
-  const [recent, lastJob, sourceCount] = await Promise.all([
+  const [statusGroups, recent, lastJob, sourceCount] = await Promise.all([
+    prisma.post.groupBy({ by: ["status"], where: { userId }, _count: { _all: true } }),
     prisma.post.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -36,6 +27,11 @@ export default async function DashboardPage() {
     }),
     prisma.source.count(),
   ]);
+  const counts = new Map(statusGroups.map((group) => [group.status, group._count._all]));
+  const total = statusGroups.reduce((sum, group) => sum + group._count._all, 0);
+  const pending = counts.get("pending_review") ?? 0;
+  const ready = counts.get("ready") ?? 0;
+  const posted = counts.get("posted_manually") ?? 0;
 
   const stats = [
     { label: "Total posts", value: total, icon: FileText, hint: "All time" },

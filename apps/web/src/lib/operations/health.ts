@@ -6,7 +6,7 @@ import { validateDeploymentEnvironment } from "@/lib/operations/config";
 import {
   completeOperationalRun,
   failOperationalRun,
-  recordOperationalEvent,
+  recordOperationalEvents,
   startOperationalRun,
   type OperationSource,
 } from "@/lib/operations/store";
@@ -175,15 +175,16 @@ export async function runServiceHealthChecks(
         metadataJson: JSON.stringify(probe.metadata ?? {}).slice(0, 4_000),
       })),
     });
-    for (const probe of probes) {
-      await recordOperationalEvent(run.id, {
+    await recordOperationalEvents(
+      run.id,
+      probes.map((probe) => ({
         stage: probe.service,
         level: probe.status === "unhealthy" ? "error" : probe.status === "degraded" || probe.status === "unknown" ? "warning" : "info",
         message: probe.message,
         durationMs: probe.latencyMs ?? undefined,
         metadata: probe.metadata,
-      });
-    }
+      })),
+    );
     const unhealthy = probes.filter((probe) => probe.status === "unhealthy").length;
     await completeOperationalRun(run.id, {
       stage: unhealthy ? "attention_required" : "completed",

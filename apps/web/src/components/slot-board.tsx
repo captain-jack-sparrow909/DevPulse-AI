@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { waitForGeneration } from "@/lib/client/generation-progress";
 
 export type SlotBoardItem = {
   slotIndex: number;
@@ -75,25 +76,24 @@ export function SlotBoard({ slots }: { slots: SlotBoardItem[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "regenerate", slotIndex, regenerate: true }),
       });
-      const data = await res.json();
+      const data = await res.json() as { error?: string; operationRunId?: string };
       if (!res.ok) {
         setError(data.error || "Regenerate failed");
-        setLogs((l) => [...l, data.error || "failed"]);
-      } else {
-        setLogs(data.logs || []);
-        if (data.skipped) {
-          setMessage(data.skipReason || "Nothing generated");
-        } else {
-          setMessage(
-            `New post for slot ${slotIndex + 1} is ready for review${
-              data.sourcesFound != null ? ` (${data.sourcesFound} sources)` : ""
-            }.`,
-          );
-        }
+        setLogs((current) => [...current, data.error || "failed"]);
+      } else if (data.operationRunId) {
+        setMessage("Regeneration accepted. It will continue even if you leave this page.");
+        const completed = await waitForGeneration(data.operationRunId, (progress) => {
+          setLogs(progress.logs);
+          setMessage(`Regenerating slot ${slotIndex + 1}: ${progress.phase.replaceAll("_", " ")}…`);
+        });
+        if (completed.status === "failed") throw new Error(completed.error || "Regeneration failed");
+        setMessage(completed.postsCreated
+          ? `New post for slot ${slotIndex + 1} is ready for review.`
+          : completed.message || "Generation checkpoint saved.");
         router.refresh();
       }
-    } catch {
-      setError("Network error");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Network error");
     } finally {
       setBusyKey(null);
     }
