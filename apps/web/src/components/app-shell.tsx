@@ -31,27 +31,48 @@ import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
 import { APP_NAME } from "@/lib/constants";
 import { NavigationLoader } from "@/components/navigation-loader";
+import { BrandMark } from "@/components/brand-mark";
 
-const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/publishing", label: "Publishing", icon: ListChecks },
-  { href: "/posts", label: "Posts", icon: FileText },
-  { href: "/generate", label: "Generate", icon: Sparkles },
-  { href: "/research", label: "Research", icon: Radar },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/experiments", label: "Experiments", icon: FlaskConical },
-  { href: "/projects", label: "Projects", icon: GitBranch },
-  { href: "/engagement", label: "Engagement", icon: MessageCircleMore },
-  { href: "/distribution", label: "Distribution", icon: Send },
-  { href: "/campaigns", label: "Campaigns", icon: Megaphone },
-  { href: "/attribution", label: "Attribution", icon: MousePointerClick },
-  { href: "/operations", label: "Operations", icon: ServerCog },
-  { href: "/growth-review", label: "Weekly review", icon: TrendingUp },
-  { href: "/execution", label: "Execution plan", icon: CalendarCheck2 },
-  { href: "/validation", label: "30-day validation", icon: Target },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
+const navSections = [
+  {
+    label: "Create",
+    items: [
+      { href: "/dashboard", label: "Command center", icon: LayoutDashboard },
+      { href: "/publishing", label: "Publishing", icon: ListChecks },
+      { href: "/posts", label: "Content library", icon: FileText },
+      { href: "/generate", label: "Generate", icon: Sparkles },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { href: "/research", label: "Research radar", icon: Radar },
+      { href: "/projects", label: "Project memory", icon: GitBranch },
+      { href: "/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/experiments", label: "Experiments", icon: FlaskConical },
+    ],
+  },
+  {
+    label: "Growth",
+    items: [
+      { href: "/engagement", label: "Engagement", icon: MessageCircleMore },
+      { href: "/distribution", label: "Distribution", icon: Send },
+      { href: "/campaigns", label: "Campaigns", icon: Megaphone },
+      { href: "/attribution", label: "Attribution", icon: MousePointerClick },
+      { href: "/growth-review", label: "Weekly review", icon: TrendingUp },
+      { href: "/execution", label: "Execution plan", icon: CalendarCheck2 },
+      { href: "/validation", label: "30-day validation", icon: Target },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { href: "/schedule", label: "Schedule", icon: Calendar },
+      { href: "/operations", label: "Operations", icon: ServerCog },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
+] as const;
 
 function NavLinks({
   onNavigate,
@@ -63,36 +84,38 @@ function NavLinks({
   const pathname = usePathname();
 
   return (
-    <nav className={cn("flex flex-col gap-1", className)}>
-      {nav.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(item.href + "/");
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            prefetch={false}
-            onClick={onNavigate}
-            className={cn(
-              "group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-all duration-150",
-              active
-                ? "bg-teal-500/10 text-teal-200 shadow-[inset_0_0_0_1px_rgba(45,212,191,0.18)]"
-                : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100",
-            )}
-          >
-            {active && (
-              <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-teal-400" />
-            )}
-            <Icon
-              className={cn(
-                "h-4 w-4 shrink-0 transition-colors",
-                active ? "text-teal-300" : "text-zinc-500 group-hover:text-zinc-300",
-              )}
-            />
-            <span className="font-medium">{item.label}</span>
-          </Link>
-        );
-      })}
+    <nav className={cn("flex flex-col gap-5", className)}>
+      {navSections.map((section) => (
+        <div key={section.label}>
+          <div className="mb-1.5 px-3 font-mono text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-600">
+            {section.label}
+          </div>
+          <div className="space-y-0.5">
+            {section.items.map((item) => {
+              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  prefetch={false}
+                  onClick={onNavigate}
+                  className={cn(
+                    "group relative flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] transition-all duration-200",
+                    active
+                      ? "bg-[linear-gradient(100deg,rgba(69,230,208,0.13),rgba(69,230,208,0.035))] text-teal-100 shadow-[inset_0_0_0_1px_rgba(69,230,208,0.16),0_10px_30px_-22px_rgba(69,230,208,0.55)]"
+                      : "text-slate-400 hover:bg-slate-200/[0.045] hover:text-slate-100",
+                  )}
+                >
+                  {active && <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-teal-300 shadow-[0_0_12px_rgba(69,230,208,0.9)]" />}
+                  <Icon className={cn("h-4 w-4 shrink-0 transition-colors", active ? "text-teal-300" : "text-slate-600 group-hover:text-slate-300")} />
+                  <span className="font-medium">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </nav>
   );
 }
@@ -132,12 +155,13 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
 function Brand() {
   return (
     <div className="flex items-center gap-3">
-      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-400/20 to-teal-600/5 font-mono text-xs font-bold text-teal-300 shadow-[inset_0_0_0_1px_rgba(45,212,191,0.25),0_0_20px_-6px_rgba(45,212,191,0.5)]">
-        DP
-      </div>
+      <BrandMark />
       <div className="min-w-0">
-        <div className="truncate text-sm font-semibold tracking-tight text-zinc-50">{APP_NAME}</div>
-        <div className="truncate text-[11px] text-zinc-500">Research-first studio</div>
+        <div className="truncate text-sm font-semibold tracking-[-0.02em] text-slate-50">{APP_NAME}</div>
+        <div className="flex items-center gap-1.5 truncate text-[10px] text-slate-500">
+          <span className="h-1 w-1 rounded-full bg-emerald-400 shadow-[0_0_7px_rgba(52,211,153,0.8)]" />
+          Signal engine online
+        </div>
       </div>
     </div>
   );
@@ -163,21 +187,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </Suspense>
 
       {/* Desktop sidebar */}
-      <aside className="hidden w-[15.5rem] shrink-0 flex-col border-r border-white/[0.06] bg-[#0a0b10]/85 backdrop-blur-xl md:flex">
-        <div className="border-b border-white/[0.06] px-5 py-5">
+      <aside className="hidden w-[16.5rem] shrink-0 flex-col border-r border-slate-300/[0.07] bg-[#070a11]/88 shadow-[18px_0_60px_-48px_rgba(69,230,208,0.35)] backdrop-blur-2xl md:flex">
+        <div className="border-b border-slate-300/[0.07] px-5 py-5">
           <Brand />
         </div>
-        <div className="flex flex-1 flex-col overflow-y-auto p-3 app-scroll">
-          <div className="mb-2 px-3 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-600">
-            Workspace
-          </div>
+        <div className="flex flex-1 flex-col overflow-y-auto px-3 py-5 app-scroll">
           <NavLinks />
         </div>
         <SidebarFooter />
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0a0b10]/90 px-4 py-3 backdrop-blur-xl md:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-slate-300/[0.08] bg-[#070a11]/88 px-4 py-3 backdrop-blur-2xl md:hidden">
         <Brand />
         <button
           type="button"
@@ -208,7 +229,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
         <aside
           className={cn(
-            "absolute left-0 top-0 flex h-full w-[min(18.5rem,88vw)] flex-col border-r border-white/[0.08] bg-[#0a0b10] shadow-2xl transition-transform duration-200 ease-out",
+            "absolute left-0 top-0 flex h-full w-[min(19rem,90vw)] flex-col border-r border-slate-300/[0.09] bg-[#070a11] shadow-2xl transition-transform duration-200 ease-out",
             open ? "translate-x-0" : "-translate-x-full",
           )}
         >
@@ -232,7 +253,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="app-main min-w-0 flex-1 overflow-x-hidden">
-        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-9">{children}</div>
+        <div className="mx-auto w-full max-w-[90rem] px-4 py-5 sm:px-6 sm:py-8 lg:px-8">{children}</div>
       </main>
     </div>
   );

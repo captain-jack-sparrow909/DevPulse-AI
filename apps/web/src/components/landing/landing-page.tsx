@@ -1,462 +1,206 @@
 import Link from "next/link";
 import {
+  Activity,
   ArrowRight,
-  BookOpen,
+  BarChart3,
+  Check,
+  ChevronRight,
+  CircleDot,
   Clock3,
+  Code2,
+  FileCheck2,
+  Fingerprint,
   GitBranch,
-  Layers,
+  Layers3,
+  LineChart,
+  LockKeyhole,
+  Orbit,
   Radar,
+  ScanSearch,
   ShieldCheck,
   Sparkles,
-  Terminal,
+  TerminalSquare,
+  TrendingUp,
+  Users,
+  Zap,
 } from "lucide-react";
 import { LandingHeader } from "@/components/landing/landing-header";
 
-const PIPELINE = [
-  {
-    step: "01",
-    title: "Start from your products",
-    body: "Owned-project facts first, with narrowly relevant external evidence only when the post type needs it.",
-  },
-  {
-    step: "02",
-    title: "Rank for your stack",
-    body: "Topics and weights you control. Signal is scored against what you actually write about.",
-  },
-  {
-    step: "03",
-    title: "Earn a publishing slot",
-    body: "One or two adaptive daily windows. Weak, repetitive, or unsupported ideas are intentionally skipped.",
-  },
-  {
-    step: "04",
-    title: "Score, screenshot, hand off",
-    body: "Quality gates, optional Playwright capture of the source, then you approve and post by hand.",
-  },
+const SIGNALS = [
+  { source: "PROJECT", title: "IntelliTab · native IPC architecture", score: "9.2", color: "text-teal-300" },
+  { source: "GITHUB", title: "Meaningful repository change detected", score: "8.8", color: "text-violet-300" },
+  { source: "AUDIENCE", title: "Question pattern worth answering", score: "8.1", color: "text-amber-200" },
 ] as const;
 
-const PROOFS = [
-  {
-    icon: Radar,
-    title: "Research-first, not prompt-first",
-    body: "The system starts from public engineering feeds. Every draft carries internal citations back to a source URL.",
-  },
-  {
-    icon: Clock3,
-    title: "Selective cadence, not feed spam",
-    body: "X and LinkedIn use separate quotas and measured timing. A quiet day is better than a forced post.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Human gate, always",
-    body: "No silent publish. X and LinkedIn write APIs are intentionally unused—you copy, attach media, and ship yourself.",
-  },
-  {
-    icon: Layers,
-    title: "Built like production software",
-    body: "Next.js, Prisma, Better Auth, typed pipeline, cron endpoint, versioned prompts. Portfolio-grade architecture, not a demo notebook.",
-  },
+const WORKFLOW = [
+  { icon: GitBranch, step: "01", title: "Observe the build", body: "Project facts, repository changes, and audience questions become durable source evidence." },
+  { icon: ScanSearch, step: "02", title: "Find the sharp angle", body: "Relevance, novelty, and product strategy rank ideas before a model writes anything." },
+  { icon: FileCheck2, step: "03", title: "Earn the publish window", body: "Platform-native drafts pass grounding, quality, repetition, and cooldown gates." },
+  { icon: LineChart, step: "04", title: "Learn from outcomes", body: "Manual performance checkpoints turn publishing into a measurable operating loop." },
 ] as const;
 
-const STACK = [
-  "Next.js",
-  "TypeScript",
-  "Prisma",
-  "Better Auth",
-  "DeepSeek",
-  "Playwright",
-  "Vercel Cron",
+const PRINCIPLES = [
+  { icon: Fingerprint, title: "Your product voice", body: "Owned-project evidence stays at the center. DevPulse amplifies your engineering judgment instead of impersonating a generic creator." },
+  { icon: ShieldCheck, title: "Grounded by design", body: "Claims remain attached to verified facts and source URLs. Unsupported narratives are removed before scoring." },
+  { icon: LockKeyhole, title: "Human at the boundary", body: "The system prepares, ranks, and measures. You approve and publish every post manually." },
 ] as const;
 
-const SLOTS = ["09:00", "18:00"] as const;
+function SignalConsole() {
+  return (
+    <div className="relative mx-auto w-full max-w-[650px] lg:mx-0">
+      <div aria-hidden className="absolute -inset-16 rounded-full bg-[radial-gradient(circle,rgba(69,230,208,0.14),transparent_58%)] blur-2xl" />
+      <div aria-hidden className="absolute -right-8 -top-8 h-44 w-44 rounded-full border border-violet-300/10" />
+      <div aria-hidden className="absolute -right-1 top-10 h-28 w-28 rounded-full border border-dashed border-teal-300/15" />
+
+      <div className="tech-panel relative overflow-hidden rounded-[1.65rem]">
+        <div aria-hidden className="scan-line absolute inset-x-0 top-0 z-10 h-24 bg-gradient-to-b from-transparent via-teal-300/[0.035] to-transparent" />
+        <div className="flex items-center justify-between border-b border-slate-300/[0.08] px-4 py-3 sm:px-5">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-rose-400/60" />
+            <span className="h-2 w-2 rounded-full bg-amber-300/60" />
+            <span className="h-2 w-2 rounded-full bg-emerald-300/70" />
+            <span className="ml-2 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-600 sm:text-[10px]">DEVPLS / SIGNAL ENGINE</span>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-full border border-emerald-300/15 bg-emerald-300/[0.06] px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-emerald-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(110,231,183,0.8)]" /> Live
+          </div>
+        </div>
+
+        <div className="grid min-h-[460px] md:grid-cols-[0.88fr_1.12fr]">
+          <div className="border-b border-slate-300/[0.07] p-4 md:border-b-0 md:border-r sm:p-5">
+            <div className="flex items-center justify-between">
+              <div><p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-600">Incoming signal</p><p className="mt-1 text-sm font-medium text-slate-200">Product intelligence</p></div>
+              <Radar className="h-4 w-4 text-teal-300" />
+            </div>
+            <div className="mt-5 space-y-2.5">
+              {SIGNALS.map((signal, index) => (
+                <div key={signal.title} className="relative overflow-hidden rounded-xl border border-slate-300/[0.08] bg-[#070b13]/70 p-3 transition hover:border-teal-300/20">
+                  {index === 0 ? <div className="absolute inset-y-0 left-0 w-0.5 bg-teal-300 shadow-[0_0_14px_rgba(69,230,208,0.9)]" /> : null}
+                  <div className="flex items-center justify-between gap-2"><span className={`font-mono text-[8px] font-semibold tracking-[0.16em] ${signal.color}`}>{signal.source}</span><span className="font-mono text-[9px] text-slate-600">{signal.score}</span></div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{signal.title}</p>
+                  <div className="mt-2 h-0.5 overflow-hidden rounded-full bg-white/[0.04]"><div className="h-full bg-gradient-to-r from-teal-300/70 to-violet-400/60" style={{ width: index === 0 ? "92%" : index === 1 ? "78%" : "64%" }} /></div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {[['63','signals'],['7','relevant'],['1','selected']].map(([value,label]) => <div key={label} className="rounded-lg border border-slate-300/[0.06] bg-white/[0.018] p-2 text-center"><p className="font-mono text-sm text-slate-200">{value}</p><p className="text-[8px] uppercase tracking-wider text-slate-600">{label}</p></div>)}
+            </div>
+          </div>
+
+          <div className="flex flex-col p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="font-mono text-[9px] uppercase tracking-[0.18em] text-violet-300/80">Ranked opportunity</p><h3 className="mt-2 text-base font-semibold tracking-tight text-slate-50">A local AI tool doesn&apos;t need an HTTP server.</h3></div>
+              <div className="rounded-xl border border-teal-300/15 bg-teal-300/[0.07] px-2.5 py-2 text-center"><p className="font-mono text-sm font-semibold text-teal-200">8.7</p><p className="text-[7px] uppercase tracking-wider text-teal-300/60">quality</p></div>
+            </div>
+            <div className="mt-4 rounded-xl border border-slate-300/[0.08] bg-[#050810]/80 p-4 shadow-inner">
+              <div className="flex items-center gap-2 text-[9px] uppercase tracking-[0.12em] text-slate-500"><TerminalSquare className="h-3.5 w-3.5 text-teal-300" /> X thread · 3 posts</div>
+              <p className="mt-3 text-[12px] leading-5 text-slate-300">IntelliTab skips the REST layer entirely. Length-prefixed JSON connects TypeScript directly to a persistent Python MLX process.</p>
+              <p className="mt-2 text-[12px] leading-5 text-slate-400">For single-user local inference, native IPC keeps the completion path focused.</p>
+              <div className="mt-4 flex flex-wrap gap-1.5"><span className="rounded-md bg-teal-300/[0.07] px-2 py-1 text-[8px] text-teal-200">grounded</span><span className="rounded-md bg-violet-300/[0.07] px-2 py-1 text-[8px] text-violet-200">novel angle</span><span className="rounded-md bg-white/[0.035] px-2 py-1 text-[8px] text-slate-400">manual review</span></div>
+            </div>
+            <div className="mt-auto pt-5">
+              <div className="flex items-center justify-between text-[9px] uppercase tracking-wider text-slate-600"><span>Publishing confidence</span><span className="text-teal-300">High</span></div>
+              <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.05]"><div className="h-full w-[86%] rounded-full bg-gradient-to-r from-teal-300 via-cyan-300 to-violet-400 shadow-[0_0_12px_rgba(69,230,208,0.45)]" /></div>
+              <div className="mt-4 flex items-center justify-between"><div className="flex items-center gap-2 text-[10px] text-slate-500"><Clock3 className="h-3.5 w-3.5" /> Next window · 18:00</div><span className="rounded-lg border border-teal-300/20 bg-teal-300/[0.08] px-2.5 py-1.5 text-[9px] font-semibold text-teal-200">READY FOR YOU</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="float-soft absolute -bottom-7 -left-4 hidden items-center gap-3 rounded-2xl border border-slate-300/[0.1] bg-[#0b101b]/95 px-3.5 py-3 shadow-2xl backdrop-blur-xl sm:flex">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-400/10 text-violet-300"><TrendingUp className="h-4 w-4" /></div>
+        <div><p className="text-[9px] uppercase tracking-wider text-slate-600">Learning loop</p><p className="mt-0.5 text-xs font-medium text-slate-200">Metrics become next week&apos;s strategy</p></div>
+      </div>
+    </div>
+  );
+}
 
 export function LandingPage() {
   return (
-    <div className="landing relative min-h-screen overflow-x-hidden bg-[#07080a] text-zinc-100">
-      {/* ambient light — restrained, not rainbow soup */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[720px] bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(45,212,191,0.14),transparent_55%),radial-gradient(ellipse_50%_40%_at_90%_10%,rgba(251,191,36,0.06),transparent_50%)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:64px_64px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_75%)]"
-      />
-
+    <div className="landing relative min-h-screen overflow-x-hidden text-slate-100">
+      <div aria-hidden className="landing-grid pointer-events-none absolute inset-x-0 top-0 h-[920px] opacity-70" />
+      <div aria-hidden className="pointer-events-none absolute left-1/2 top-16 h-[40rem] w-[40rem] -translate-x-1/2 rounded-full border border-teal-300/[0.035]" />
       <LandingHeader />
 
       <main className="relative z-10">
-        {/* HERO */}
-        <section className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6 sm:pb-20 sm:pt-12 lg:pb-28">
-          <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+        <section className="mx-auto max-w-7xl px-4 pb-20 pt-14 sm:px-6 sm:pt-20 lg:px-8 lg:pb-32 lg:pt-28">
+          <div className="grid items-center gap-16 lg:grid-cols-[0.92fr_1.08fr] lg:gap-14 xl:gap-20">
             <div>
-              <div className="mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-teal-300/90 sm:mb-6 sm:text-[11px] sm:tracking-[0.14em]">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-teal-400 shadow-[0_0_12px_rgba(45,212,191,0.8)]" />
-                <span className="truncate">Built for engineers who ship in public</span>
+              <div className="inline-flex items-center gap-2 rounded-full border border-teal-300/15 bg-teal-300/[0.055] px-3 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-teal-200 sm:text-[10px]">
+                <Activity className="h-3.5 w-3.5" /> Product intelligence for technical creators
               </div>
-              <h1 className="max-w-xl text-[1.85rem] font-semibold leading-[1.1] tracking-tight text-zinc-50 sm:text-[2.35rem] sm:leading-[1.08] md:text-5xl md:leading-[1.05]">
-                Content that starts from{" "}
-                <span className="bg-gradient-to-r from-teal-200 via-teal-100 to-amber-100/90 bg-clip-text text-transparent">
-                  real engineering signal
-                </span>
-                —not a blank prompt.
+              <h1 className="mt-7 max-w-2xl text-[2.65rem] font-semibold leading-[0.98] tracking-[-0.06em] text-white sm:text-6xl lg:text-[4.35rem] xl:text-[4.85rem]">
+                Turn what you build into <span className="gradient-text">signal people follow.</span>
               </h1>
-              <p className="mt-5 max-w-lg text-[15px] leading-relaxed text-zinc-400 sm:mt-6 sm:text-base sm:text-lg">
-                DevPulse turns real lessons from the products you are building into senior-engineer
-                posts for X and LinkedIn, supported by selective research. Only strong drafts earn a slot. You approve.
-                You post. The feed stays honest.
+              <p className="mt-7 max-w-xl text-base leading-7 text-slate-400 sm:text-lg sm:leading-8">
+                DevPulse transforms real product decisions, repository changes, and audience questions into grounded X and LinkedIn content—then learns what actually grows your reputation.
               </p>
-              <div className="mt-7 flex w-full flex-col gap-3 sm:mt-8 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-                <Link
-                  href="/register"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-400 px-5 py-3 text-sm font-semibold text-zinc-950 shadow-[0_0_40px_-12px_rgba(45,212,191,0.7)] transition hover:bg-teal-300 sm:w-auto"
-                >
-                  Create workspace
-                  <ArrowRight className="h-4 w-4" />
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Link href="/register" className="group inline-flex items-center justify-center gap-2 rounded-xl border border-teal-200/20 bg-[linear-gradient(110deg,#42e2cc,#70ead7)] px-5 py-3.5 text-sm font-semibold text-[#04110f] shadow-[0_16px_40px_-18px_rgba(69,230,208,0.9)] transition hover:-translate-y-0.5 hover:brightness-110">
+                  Build your signal engine <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </Link>
-                <a
-                  href="#pipeline"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.06] sm:w-auto"
-                >
-                  See how it works
-                </a>
+                <a href="#platform" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300/[0.12] bg-slate-200/[0.045] px-5 py-3.5 text-sm font-medium text-slate-200 transition hover:-translate-y-0.5 hover:border-violet-300/25 hover:bg-violet-300/[0.055]">Explore the platform <ChevronRight className="h-4 w-4 text-slate-500" /></a>
               </div>
-              <dl className="mt-8 grid max-w-md grid-cols-3 gap-2 border-t border-white/10 pt-6 sm:mt-10 sm:gap-4 sm:pt-8">
-                {[
-                  ["1–2", "draft windows / day"],
-                  ["2", "platform cadences"],
-                  ["0", "auto-publishes"],
-                ].map(([value, label]) => (
-                  <div key={label}>
-                    <dt className="font-mono text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl">
-                      {value}
-                    </dt>
-                    <dd className="mt-1 text-[10px] uppercase leading-tight tracking-wide text-zinc-500 sm:text-[11px]">
-                      {label}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-
-            {/* Product frame — CSS mock, not stock art */}
-            <div className="relative">
-              <div
-                aria-hidden
-                className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-teal-500/10 via-transparent to-amber-500/5 blur-2xl"
-              />
-              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0c0e12]/95 shadow-2xl shadow-black/50 backdrop-blur">
-                <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
-                  </div>
-                  <div className="font-mono text-[11px] text-zinc-500">slot · 14:12 · Asia/Dubai</div>
-                  <div className="rounded-md border border-teal-500/20 bg-teal-500/10 px-2 py-0.5 text-[10px] font-medium text-teal-300">
-                    due now
-                  </div>
-                </div>
-                <div className="space-y-4 p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] uppercase tracking-wider text-zinc-500">
-                        Live research
-                      </div>
-                      <div className="mt-1 text-sm font-medium text-zinc-100">
-                        Projects first · targeted evidence
-                      </div>
-                    </div>
-                    <div className="rounded-md bg-zinc-900 px-2 py-1 font-mono text-[10px] text-zinc-400">
-                      run #47
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    {[
-                      { src: "github", title: "colibri — local GLM runtime", score: "92" },
-                      { src: "arxiv", title: "Efficient tool-use for agents", score: "88" },
-                      { src: "hn", title: "Show HN: ship logs that don’t lie", score: "81" },
-                    ].map((row) => (
-                      <div
-                        key={row.title}
-                        className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
-                      >
-                        <span className="w-12 shrink-0 font-mono text-[10px] uppercase text-teal-400/90">
-                          {row.src}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-xs text-zinc-300">
-                          {row.title}
-                        </span>
-                        <span className="font-mono text-[10px] text-zinc-500">{row.score}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="rounded-xl border border-amber-500/15 bg-gradient-to-b from-amber-500/[0.07] to-transparent p-4">
-                    <div className="flex items-center gap-2 text-[11px] text-amber-200/80">
-                      <Terminal className="h-3.5 w-3.5" />
-                      Draft · LinkedIn · pending review
-                    </div>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-200">
-                      Most teams debug agents by staring at the model. The bug is usually the loop:
-                      unbounded retries, no request id, no idempotency. One log line would have saved
-                      two days.
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <span className="rounded-md border border-white/10 px-2 py-0.5 text-[10px] text-zinc-400">
-                        score 8.6
-                      </span>
-                      <span className="rounded-md border border-white/10 px-2 py-0.5 text-[10px] text-zinc-400">
-                        screenshot attached
-                      </span>
-                      <span className="rounded-md border border-white/10 px-2 py-0.5 text-[10px] text-zinc-400">
-                        manual post
-                      </span>
-                    </div>
-                  </div>
-                </div>
+              <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 border-t border-slate-300/[0.08] pt-6 text-[11px] text-slate-500">
+                {["Grounded in your work", "Platform-native writing", "Human-approved publishing"].map((item) => <span key={item} className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-teal-300" />{item}</span>)}
               </div>
             </div>
+            <SignalConsole />
           </div>
         </section>
 
-        {/* PROBLEM */}
-        <section id="problem" className="border-y border-white/[0.06] bg-black/20">
-          <div className="mx-auto grid max-w-6xl gap-0 px-4 sm:px-6 md:grid-cols-2">
-            <div className="border-b border-white/[0.06] py-10 sm:py-14 md:border-b-0 md:border-r md:pr-12">
-              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-rose-300/70">
-                The default path
-              </div>
-              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-zinc-100">
-                Prompt-first content is disposable.
-              </h2>
-              <ul className="mt-6 space-y-3 text-sm leading-relaxed text-zinc-400">
-                <li className="flex gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400/60" />
-                  Invented “trends” with no URL, no paper, no repo.
-                </li>
-                <li className="flex gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400/60" />
-                  Twelve posts written at dawn that ignore the day’s actual news.
-                </li>
-                <li className="flex gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400/60" />
-                  Auto-publish that trades reputation for volume.
-                </li>
-              </ul>
-            </div>
-            <div className="py-10 sm:py-14 md:pl-12">
-              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-teal-300/80">
-                The DevPulse path
-              </div>
-              <h2 className="mt-3 text-xl font-semibold tracking-tight text-zinc-100 sm:text-2xl">
-                Research first. Then write. Then you decide.
-              </h2>
-              <ul className="mt-6 space-y-3 text-sm leading-relaxed text-zinc-400">
-                <li className="flex gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-400/70" />
-                  Every angle is grounded in a fetched source and stored citation.
-                </li>
-                <li className="flex gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-400/70" />
-                  Slot-time generation re-researches so 15:00 can reflect 14:00’s launch.
-                </li>
-                <li className="flex gap-3">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-400/70" />
-                  Manual post pack: copy, optional screenshot, mark posted. Nothing leaves without you.
-                </li>
-              </ul>
-            </div>
+        <section className="border-y border-slate-300/[0.07] bg-[#070a11]/60">
+          <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+            <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-600">Built on a production-grade stack</p>
+            <div className="flex flex-wrap gap-x-6 gap-y-3 font-mono text-[10px] uppercase tracking-[0.12em] text-slate-400">{["Next.js", "Postgres", "DeepSeek", "Playwright", "Cloudflare R2", "Vercel"].map((item) => <span key={item}>{item}</span>)}</div>
           </div>
         </section>
 
-        {/* PIPELINE */}
-        <section id="pipeline" className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-28">
-          <div className="max-w-2xl">
-            <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-500">
-              Pipeline
-            </div>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl md:text-4xl">
-              A system you can explain in an interview.
-            </h2>
-            <p className="mt-4 text-base leading-relaxed text-zinc-400">
-              Not a chat wrapper. A scheduled, research-backed content factory with explicit human
-              control—designed so the architecture is as legible as the posts it produces.
-            </p>
+        <section id="platform" className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-32">
+          <div className="grid gap-8 lg:grid-cols-[0.7fr_1.3fr] lg:items-end">
+            <div><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-teal-300">One connected system</p><h2 className="mt-4 text-3xl font-semibold tracking-[-0.045em] text-slate-50 sm:text-5xl">From build log to growth loop.</h2></div>
+            <p className="max-w-2xl text-base leading-7 text-slate-400 lg:justify-self-end">Most content tools begin at the cursor. DevPulse begins upstream—with the work, evidence, and decisions that make your perspective worth following.</p>
           </div>
 
-          <ol className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {PIPELINE.map((item) => (
-              <li
-                key={item.step}
-                className="group relative rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 transition hover:border-teal-500/25 hover:bg-teal-500/[0.04]"
-              >
-                <div className="font-mono text-xs text-teal-400/80">{item.step}</div>
-                <h3 className="mt-3 text-base font-semibold text-zinc-100">{item.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-500">{item.body}</p>
-              </li>
-            ))}
-          </ol>
+          <div className="mt-12 grid gap-4 lg:grid-cols-12">
+            <article className="tech-panel relative overflow-hidden rounded-[1.5rem] p-6 lg:col-span-7 lg:p-8">
+              <div aria-hidden className="absolute -right-20 -top-20 h-64 w-64 rounded-full border border-teal-300/10 bg-teal-300/[0.025]" />
+              <div className="relative flex h-full flex-col"><div className="flex items-center justify-between"><div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-teal-300/15 bg-teal-300/[0.07] text-teal-200"><Radar className="h-5 w-5" /></div><span className="font-mono text-[9px] uppercase tracking-[0.18em] text-teal-300/60">Project memory</span></div><h3 className="mt-7 max-w-md text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">Your products become a living source of content truth.</h3><p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">Repository changes, verified project facts, campaign goals, and audience signals stay connected—so each draft can be specific without inventing a backstory.</p><div className="mt-8 grid grid-cols-3 gap-2 sm:max-w-lg">{[["03","products"],["24","fact cards"],["100%","traceable"]].map(([value,label]) => <div key={label} className="rounded-xl border border-slate-300/[0.07] bg-black/20 p-3"><p className="font-mono text-lg text-slate-100">{value}</p><p className="mt-1 text-[9px] uppercase tracking-wider text-slate-600">{label}</p></div>)}</div></div>
+            </article>
 
-          {/* Day ribbon */}
-          <div className="mt-14 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0b0d11]">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-4">
-              <div className="flex items-center gap-2 text-sm text-zinc-300">
-                <Clock3 className="h-4 w-4 text-teal-400" />
-                Adaptive publishing windows · Asia/Dubai
-              </div>
-              <div className="text-xs text-zinc-500">
-                Cron ticks every ~15 min · weak drafts are skipped
-              </div>
-            </div>
-            <div className="flex gap-2 overflow-x-auto p-4 [scrollbar-width:thin]">
-              {SLOTS.map((t, i) => {
-                const state = i === 0 ? "done" : "active";
-                return (
-                  <div
-                    key={t}
-                    className={`min-w-[4.5rem] flex-1 rounded-lg border px-2 py-3 text-center ${
-                      state === "done"
-                        ? "border-teal-500/20 bg-teal-500/10"
-                        : state === "active"
-                          ? "border-amber-400/40 bg-amber-400/10 shadow-[0_0_24px_-8px_rgba(251,191,36,0.5)]"
-                          : "border-white/[0.06] bg-white/[0.02]"
-                    }`}
-                  >
-                    <div className="font-mono text-[11px] text-zinc-300">{t}</div>
-                    <div className="mt-1 text-[10px] uppercase tracking-wide text-zinc-500">
-                      {state === "done" ? "filled" : state === "active" ? "due" : "later"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <article className="tech-panel relative overflow-hidden rounded-[1.5rem] p-6 lg:col-span-5 lg:p-8">
+              <div className="flex items-center justify-between"><div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-violet-300/15 bg-violet-300/[0.07] text-violet-200"><BarChart3 className="h-5 w-5" /></div><span className="font-mono text-[9px] uppercase tracking-[0.18em] text-violet-300/60">Decision layer</span></div>
+              <h3 className="mt-7 text-2xl font-semibold tracking-tight text-slate-50">Publish less. Learn faster.</h3><p className="mt-3 text-sm leading-6 text-slate-400">Quality, novelty, project cooldowns, and platform cadence decide what earns attention—not a quota that must be filled.</p>
+              <div className="mt-8 space-y-3">{[["Grounding","100%"],["Novelty","87%"],["Hook strength","82%"]].map(([label,value],i) => <div key={label}><div className="flex justify-between text-[10px] text-slate-500"><span>{label}</span><span className="font-mono text-slate-300">{value}</span></div><div className="mt-1.5 h-1 rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-teal-300" style={{width:i===0?'100%':i===1?'87%':'82%'}} /></div></div>)}</div>
+            </article>
+
+            <article className="tech-panel relative rounded-[1.5rem] p-6 lg:col-span-4 lg:p-8"><div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.07] text-cyan-200"><Layers3 className="h-5 w-5" /></div><h3 className="mt-6 text-xl font-semibold text-slate-50">Platform-native packs</h3><p className="mt-3 text-sm leading-6 text-slate-400">One idea becomes a concise X thread and a deeper LinkedIn narrative—not duplicated copy.</p><div className="mt-7 flex gap-2"><span className="rounded-lg border border-slate-300/[0.08] bg-white/[0.025] px-3 py-2 font-mono text-[9px] text-slate-400">X / THREAD</span><span className="rounded-lg border border-slate-300/[0.08] bg-white/[0.025] px-3 py-2 font-mono text-[9px] text-slate-400">IN / STORY</span></div></article>
+            <article className="tech-panel relative rounded-[1.5rem] p-6 lg:col-span-4 lg:p-8"><div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-300/15 bg-amber-300/[0.07] text-amber-200"><Sparkles className="h-5 w-5" /></div><h3 className="mt-6 text-xl font-semibold text-slate-50">Visual content studio</h3><p className="mt-3 text-sm leading-6 text-slate-400">Grounded technical cards and carousels carry your brand across both feeds.</p><div className="mt-7 grid grid-cols-3 gap-2">{["PNG","PDF","R2"].map((x) => <span key={x} className="rounded-lg border border-slate-300/[0.08] bg-white/[0.025] px-2 py-2 text-center font-mono text-[9px] text-slate-400">{x}</span>)}</div></article>
+            <article className="tech-panel relative rounded-[1.5rem] p-6 lg:col-span-4 lg:p-8"><div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.07] text-emerald-200"><TrendingUp className="h-5 w-5" /></div><h3 className="mt-6 text-xl font-semibold text-slate-50">Measured growth</h3><p className="mt-3 text-sm leading-6 text-slate-400">Follower checkpoints, experiments, attribution, and 30-day validation keep recommendations honest.</p><div className="mt-7 flex items-end gap-1.5">{[28,42,36,58,52,74,86].map((h,i) => <span key={i} className="flex-1 rounded-sm bg-gradient-to-t from-emerald-400/20 to-teal-300/70" style={{height:`${h}px`}} />)}</div></article>
           </div>
         </section>
 
-        {/* SYSTEM / PROOF */}
-        <section id="system" className="border-t border-white/[0.06] bg-black/25">
-          <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-28">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-xl">
-                <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-500">
-                  System design
-                </div>
-                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl md:text-4xl">
-                  Details that survive a code review.
-                </h2>
-              </div>
-              <p className="max-w-md text-sm leading-relaxed text-zinc-500">
-                Built as a solo production tool with free-tier constraints in mind: SQLite or
-                Supabase, DeepSeek for cost, Playwright for media, cron for cadence—no paid social
-                write APIs required.
-              </p>
-            </div>
-
-            <div id="proof" className="mt-12 grid gap-4 md:grid-cols-2">
-              {PROOFS.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <article
-                    key={item.title}
-                    className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-white/[0.03] to-transparent p-6"
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-teal-300">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <h3 className="mt-4 text-lg font-semibold text-zinc-100">{item.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-500">{item.body}</p>
-                  </article>
-                );
-              })}
-            </div>
-
-            <div className="mt-10 flex flex-wrap items-center gap-2">
-              <span className="mr-2 text-xs uppercase tracking-wider text-zinc-600">Stack</span>
-              {STACK.map((s) => (
-                <span
-                  key={s}
-                  className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-xs text-zinc-400"
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
+        <section id="workflow" className="border-y border-slate-300/[0.07] bg-[#070a11]/58">
+          <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
+            <div className="max-w-2xl"><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300">The operating loop</p><h2 className="mt-4 text-3xl font-semibold tracking-[-0.045em] text-slate-50 sm:text-5xl">A repeatable system, not a content slot machine.</h2></div>
+            <ol className="relative mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div aria-hidden className="signal-line absolute left-[10%] right-[10%] top-7 hidden h-px lg:block" />
+              {WORKFLOW.map((item) => { const Icon=item.icon; return <li key={item.step} className="tech-panel relative rounded-[1.35rem] p-5"><div className="relative flex items-center justify-between"><div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-teal-300/15 bg-[#08121a] text-teal-200 shadow-[0_0_24px_-12px_rgba(69,230,208,0.8)]"><Icon className="h-5 w-5" /></div><span className="font-mono text-[10px] text-slate-600">{item.step}</span></div><h3 className="relative mt-6 text-base font-semibold text-slate-100">{item.title}</h3><p className="relative mt-2 text-sm leading-6 text-slate-500">{item.body}</p></li>; })}
+            </ol>
           </div>
         </section>
 
-        {/* CAPABILITIES STRIP */}
-        <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
-          <div className="grid gap-6 rounded-2xl border border-white/[0.08] bg-[linear-gradient(135deg,rgba(45,212,191,0.08),transparent_40%,rgba(251,191,36,0.05))] p-5 sm:rounded-3xl sm:p-8 md:p-10 lg:grid-cols-[1fr_auto] lg:items-center">
-            <div>
-              <div className="flex items-center gap-2 text-teal-300">
-                <Sparkles className="h-4 w-4 shrink-0" />
-                <span className="text-xs font-medium uppercase tracking-[0.14em]">
-                  What you get in the product
-                </span>
-              </div>
-              <h2 className="mt-3 text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl md:text-3xl">
-                Dashboard, research feed, slot board, review desk, screenshots.
-              </h2>
-              <ul className="mt-6 grid gap-3 text-sm text-zinc-400 sm:grid-cols-2">
-                <li className="flex items-start gap-2">
-                  <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-teal-400/80" />
-                  Writing styles, topics, quality threshold
-                </li>
-                <li className="flex items-start gap-2">
-                  <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-teal-400/80" />
-                  Deduped sources + generation job logs
-                </li>
-                <li className="flex items-start gap-2">
-                  <Radar className="mt-0.5 h-4 w-4 shrink-0 text-teal-400/80" />
-                  Optional X bearer for research only
-                </li>
-                <li className="flex items-start gap-2">
-                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-teal-400/80" />
-                  Copy pack for manual X / LinkedIn posts
-                </li>
-              </ul>
-            </div>
-            <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:flex-col">
-              <Link
-                href="/register"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-100 px-6 py-3.5 text-sm font-semibold text-zinc-950 transition hover:bg-white lg:w-auto"
-              >
-                Start building in public
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex w-full items-center justify-center rounded-xl border border-white/15 px-6 py-3.5 text-sm font-medium text-zinc-200 transition hover:bg-white/[0.04] lg:w-auto"
-              >
-                I already have an account
-              </Link>
-            </div>
-          </div>
+        <section id="intelligence" className="mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:px-8 lg:py-32">
+          <div><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-teal-300">Compounding intelligence</p><h2 className="mt-4 text-3xl font-semibold tracking-[-0.045em] text-slate-50 sm:text-5xl">Every post makes the next decision smarter.</h2><p className="mt-5 max-w-xl text-base leading-7 text-slate-400">DevPulse connects creation, distribution, measurement, and review. You can see why an idea was selected, what shipped, and whether the audience cared.</p><div className="mt-8 grid gap-3 sm:grid-cols-2">{[[Users,"Audience signals"],[Orbit,"Experiments"],[TrendingUp,"Growth reviews"],[Zap,"Adaptive cadence"]].map(([Icon,label]) => { const C=Icon as typeof Users; return <div key={label as string} className="flex items-center gap-3 rounded-xl border border-slate-300/[0.08] bg-slate-200/[0.025] p-3 text-sm text-slate-300"><C className="h-4 w-4 text-teal-300" />{label as string}</div>; })}</div></div>
+          <div className="tech-panel relative overflow-hidden rounded-[1.75rem] p-5 sm:p-8"><div aria-hidden className="absolute -right-24 -top-24 h-72 w-72 rounded-full border border-violet-300/10 bg-violet-300/[0.025]" /><div className="relative flex items-center justify-between"><div><p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-600">30-day validation</p><p className="mt-1 text-lg font-semibold text-slate-100">Growth signal dashboard</p></div><span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.06] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider text-emerald-300">Active</span></div><div className="relative mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">{[["17","days"],["82%","coverage"],["+14","followers"],["3.8%","engagement"]].map(([value,label]) => <div key={label} className="rounded-xl border border-slate-300/[0.07] bg-black/20 p-3"><p className="font-mono text-xl text-slate-100">{value}</p><p className="mt-1 text-[9px] uppercase tracking-wider text-slate-600">{label}</p></div>)}</div><div className="relative mt-6 rounded-xl border border-teal-300/[0.1] bg-teal-300/[0.035] p-4"><div className="flex items-start gap-3"><CircleDot className="mt-0.5 h-4 w-4 shrink-0 text-teal-300" /><div><p className="text-sm font-medium text-teal-100">Keep the current quality gate</p><p className="mt-1 text-xs leading-5 text-slate-400">Engagement improved with sufficient sample size. Preserve cadence for the next window.</p></div></div></div></div>
         </section>
+
+        <section id="principles" className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8 lg:pb-32"><div className="grid gap-4 lg:grid-cols-3">{PRINCIPLES.map((item)=>{const Icon=item.icon;return <article key={item.title} className="group rounded-[1.4rem] border border-slate-300/[0.08] bg-[linear-gradient(145deg,rgba(14,20,31,0.66),rgba(6,9,15,0.78))] p-6 transition hover:-translate-y-1 hover:border-teal-300/20"><Icon className="h-5 w-5 text-teal-300" /><h3 className="mt-5 text-lg font-semibold text-slate-100">{item.title}</h3><p className="mt-2 text-sm leading-6 text-slate-500">{item.body}</p></article>})}</div></section>
+
+        <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8 lg:pb-28"><div className="relative overflow-hidden rounded-[2rem] border border-teal-300/15 bg-[linear-gradient(125deg,rgba(20,52,55,0.78),rgba(10,15,27,0.94)_48%,rgba(47,32,82,0.7))] px-6 py-12 shadow-[0_40px_100px_-55px_rgba(69,230,208,0.55)] sm:px-10 lg:px-14 lg:py-16"><div aria-hidden className="absolute -right-20 -top-40 h-96 w-96 rounded-full border border-violet-200/10 bg-violet-300/[0.04]" /><div aria-hidden className="absolute bottom-0 left-0 h-px w-2/3 bg-gradient-to-r from-teal-300/70 to-transparent" /><div className="relative grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center"><div><p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-teal-200">Your work is already the content</p><h2 className="mt-4 max-w-3xl text-3xl font-semibold tracking-[-0.045em] text-white sm:text-5xl">Build the reputation layer around what you ship.</h2><p className="mt-4 max-w-2xl text-base leading-7 text-slate-300/80">Start with your projects. Keep human judgment. Let the evidence compound.</p></div><Link href="/register" className="group inline-flex items-center justify-center gap-2 rounded-xl bg-slate-50 px-5 py-3.5 text-sm font-semibold text-slate-950 shadow-xl transition hover:-translate-y-0.5 hover:bg-white">Open your workspace <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" /></Link></div></div></section>
       </main>
 
-      <footer className="relative z-10 border-t border-white/[0.06]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 sm:px-6 sm:py-10 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-sm font-semibold text-zinc-200">DevPulse AI</div>
-            <p className="mt-1 max-w-md text-xs leading-relaxed text-zinc-600">
-              A research-first content system for software engineers. Personal product · portfolio
-              engineering · not a black-box growth tool.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-500">
-            <Link href="/login" className="hover:text-zinc-300">
-              Sign in
-            </Link>
-            <Link href="/register" className="hover:text-zinc-300">
-              Register
-            </Link>
-            <span className="text-zinc-700">© {new Date().getFullYear()}</span>
-          </div>
-        </div>
-      </footer>
+      <footer className="relative z-10 border-t border-slate-300/[0.07] bg-[#05070c]/80"><div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8"><div className="flex items-center gap-3"><div className="flex h-8 w-8 items-center justify-center rounded-lg border border-teal-300/15 bg-teal-300/[0.06] text-teal-200"><Code2 className="h-4 w-4" /></div><div><p className="text-sm font-semibold text-slate-200">DevPulse AI</p><p className="text-[10px] text-slate-600">Product intelligence for engineers who build in public.</p></div></div><div className="flex items-center gap-5 text-xs text-slate-500"><Link href="/login" className="hover:text-slate-200">Sign in</Link><Link href="/register" className="hover:text-slate-200">Create account</Link><span>© {new Date().getFullYear()}</span></div></div></footer>
     </div>
   );
 }
