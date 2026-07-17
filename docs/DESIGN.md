@@ -25,6 +25,9 @@ DevPulse is **research-first**:
 11. **Operate distribution manually** with ranked conversations and measurable follow-up (Phase 8).
 12. **Build product narratives** through evidence-gated campaigns with measurable goals (Phase 9).
 13. **Attribute outcomes safely** from aggregate clicks to explicit conversions (Phase 10).
+14. **Operate reliably** with health probes, telemetry, and checkpoint-safe recovery (Phase 11).
+15. **Decide from comparable evidence** in a weekly approval-gated review (Phases 12–13).
+16. **Execute deliberately** through a seven-day anchor plan that still requires manual publishing (Phase 14).
 
 For a single user on free/cheap tiers, complexity must stay low: one deployable app, DB-backed jobs instead of Redis at first, free public APIs for research, DeepSeek for LLM, Supabase when ready.
 
@@ -118,6 +121,8 @@ Phase 1 implements this as a **typed sequential pipeline** with real free resear
 - **StrategyRecommendation** — approval-gated learned preference (Phase 5)
 - **PromptVersion** — versioned prompts
 - **GenerationJob** — pipeline job status
+- **WeeklyGrowthReview / WeeklyGrowthDecision** — persisted evidence and explicit decisions (Phase 12)
+- **WeeklyExecutionPlan / ExecutionPlanItem** — approval-gated seven-day anchor plan (Phase 14)
 
 ### Post statuses
 
@@ -221,6 +226,22 @@ When a post benefits from media (repos, papers, demos, many LinkedIn posts), Chr
 - Explicit approval per decision; review generation never mutates strategy
 - One-slot content-mix changes with stale snapshot checks and draft-only experiment proposals
 - Historical next-week briefs with PDF and CSV export
+
+### Phase 13 — Measurement automation and data quality
+- Independent X/LinkedIn capture tasks at 1h, 24h, 72h, and 7d
+- Bounded post-age windows and latest valid 24h cohorts for weekly comparisons
+- Coverage-based confidence instead of raw snapshot counts
+- Cumulative-regression, timing, duplicate-age, and follower-pair audits
+- Idempotent file checksums and row keys for DevPulse/X/LinkedIn CSV imports
+- Explicit account follower checkpoints kept separate from per-post attribution
+
+### Phase 14 — Weekly execution planner
+- Seven anchor briefs derived deterministically from the latest weekly review
+- Item rejection before approval and explicit skipping after approval
+- Approval blocked until all review decisions are decided
+- Matching-slot content, project, angle, and media guidance without creating or publishing posts
+- Passive iCalendar export and explicit drafted, published, and measured lifecycle
+- Valid 24-hour checkpoint required before an anchor can be marked measured
 
 ---
 

@@ -21,6 +21,14 @@ export interface ReviewPeriodPerformance {
 }
 
 export interface WeeklyReviewEvidence {
+  measurement: {
+    due24h: number;
+    completed24h: number;
+    comparableCoverage: number;
+    comparablePosts: number;
+    confidence: ReviewConfidence;
+    alerts: number;
+  };
   current: ReviewPeriodPerformance;
   previous: ReviewPeriodPerformance;
   attribution: {
@@ -237,11 +245,7 @@ export function buildWeeklyReview(evidence: WeeklyReviewEvidence): WeeklyReviewD
   const weakest = [...repeatedTypes].sort((a, b) => a.engagementRate - b.engagementRate)[0];
   const bestType = strongest ? asContentType(strongest.key) : null;
   const mixAction = proposeMixChange(evidence.contentMix, strongest, weakest);
-  const confidence: ReviewConfidence = current.trackedPosts >= 10
-    ? "high"
-    : current.trackedPosts >= 6
-      ? "medium"
-      : "low";
+  const confidence: ReviewConfidence = evidence.measurement.confidence;
 
   const continueDecision: WeeklyReviewDecisionDraft = strongest
     ? {
@@ -351,6 +355,7 @@ export function buildWeeklyReview(evidence: WeeklyReviewEvidence): WeeklyReviewD
       experiment: testDecision.title,
       measurement: [
         "Capture X and LinkedIn metrics at a consistent 24-hour post age.",
+        `Comparable 24-hour coverage is ${evidence.measurement.comparableCoverage.toFixed(1)}% (${evidence.measurement.completed24h}/${evidence.measurement.due24h} due checkpoints).`,
         "Record impressions, engagement, profile visits, link clicks, and follower before/after counts.",
         "Use tracked links for product CTAs and record explicit conversion events instead of inferring outcomes.",
         evidence.distribution.assistedPosts && evidence.distribution.baselinePosts

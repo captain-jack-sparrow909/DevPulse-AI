@@ -48,6 +48,9 @@ model User {
   operationalRuns         OperationalRun[]
   serviceHealthSnapshots  ServiceHealthSnapshot[]
   weeklyGrowthReviews     WeeklyGrowthReview[]
+  followerCheckpoints     FollowerCheckpoint[]
+  performanceImportRuns   PerformanceImportRun[]
+  weeklyExecutionPlans    WeeklyExecutionPlan[]
 }
 
 model Session {
@@ -340,6 +343,7 @@ model Post {
   campaignItem                 CampaignItem?
   trackedLinks                 TrackedLink[]
   conversionEvents             ConversionEvent[]
+  executionPlanItem            ExecutionPlanItem?
 
   @@index([userId, status])
   @@index([userId, createdAt])
@@ -472,11 +476,55 @@ model SocialPerformanceSnapshot {
   followersBefore Int?
   followersAfter  Int?
   notes           String?
+  checkpoint      String   @default("custom") // 1h | 24h | 72h | 7d | custom
+  source          String   @default("manual") // manual | devpulse_csv | x_csv | linkedin_csv
+  importKey       String?
   capturedAt      DateTime @default(now())
   createdAt       DateTime @default(now())
 
   @@index([userId, capturedAt])
   @@index([postId, platform, capturedAt])
+  @@index([userId, checkpoint, capturedAt])
+  @@index([userId, importKey])
+}
+
+/// Account-level follower and optional profile-view checkpoint. These values
+/// are explicit manual/imported observations, never inferred from engagement.
+model FollowerCheckpoint {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform     String // x | linkedin
+  followers    Int
+  profileViews Int?
+  source       String   @default("manual") // manual | devpulse_csv | x_csv | linkedin_csv
+  notes        String?
+  importKey    String?
+  capturedAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, importKey])
+  @@index([userId, platform, capturedAt])
+}
+
+/// Audit row for a bulk import. The checksum plus row-level import keys make
+/// retries idempotent while retaining duplicate and validation counts.
+model PerformanceImportRun {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  format         String   @default("devpulse") // devpulse | x | linkedin
+  fileName       String?
+  checksum       String
+  status         String   @default("completed") // completed | partial | failed
+  rowCount       Int      @default(0)
+  importedCount  Int      @default(0)
+  duplicateCount Int      @default(0)
+  errorsJson     String   @default("[]")
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, checksum])
+  @@index([userId, createdAt])
 }
 
 /// Conversation worth joining. X search can ingest these; LinkedIn can be entered manually.
@@ -886,9 +934,72 @@ model WeeklyGrowthReview {
   updatedAt         DateTime               @updatedAt
   reviewedAt        DateTime?
   decisions         WeeklyGrowthDecision[]
+  executionPlans    WeeklyExecutionPlan[]
 
   @@unique([userId, weekKey])
   @@index([userId, periodEnd])
+}
+
+/// A seven-day anchor-post plan generated from a persisted weekly growth
+/// review. Draft creation never changes the live schedule or generation path.
+model WeeklyExecutionPlan {
+  id           String              @id @default(cuid())
+  userId       String
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewId     String
+  review       WeeklyGrowthReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  weekKey      String
+  timezone     String
+  periodStart  DateTime
+  periodEnd    DateTime
+  status       String              @default("draft") // draft | approved | completed | cancelled
+  briefJson    String
+  evidenceJson String
+  approvedAt   DateTime?
+  completedAt  DateTime?
+  cancelledAt  DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  items        ExecutionPlanItem[]
+
+  @@unique([userId, weekKey])
+  @@unique([reviewId])
+  @@index([userId, status, periodStart])
+}
+
+/// One approval-gated anchor post. An approved item may guide the matching
+/// daily generation slot, but the resulting draft still requires normal review
+/// and manual publishing.
+model ExecutionPlanItem {
+  id                String              @id @default(cuid())
+  planId            String
+  plan              WeeklyExecutionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  sequence          Int
+  scheduledFor      DateTime
+  slotIndex         Int
+  contentType       String
+  projectId         String?
+  projectName       String?
+  objective         String
+  angle             String
+  platforms         String              @default("x,linkedin")
+  mediaType         String              @default("branded_visual")
+  ctaJson           String              @default("{}")
+  distributionJson  String              @default("{}")
+  measurementJson   String              @default("{}")
+  experimentId      String?
+  campaignId        String?
+  sourceDecisionIds String              @default("[]")
+  status            String              @default("proposed") // proposed | approved | rejected | drafted | published | measured | skipped
+  postId            String?             @unique
+  post              Post?               @relation(fields: [postId], references: [id], onDelete: SetNull)
+  decidedAt         DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([planId, sequence])
+  @@index([planId, status, scheduledFor])
+  @@index([scheduledFor, slotIndex, status])
 }
 
 /// One of exactly three review decisions: continue, reduce, or test.

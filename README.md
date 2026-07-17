@@ -19,6 +19,8 @@ You **always post manually**. DevPulse never calls X or LinkedIn write APIs.
 | Attribution | [`docs/ATTRIBUTION.md`](./docs/ATTRIBUTION.md) |
 | Production operations | [`docs/OPERATIONS.md`](./docs/OPERATIONS.md) |
 | Weekly growth review | [`docs/WEEKLY-GROWTH.md`](./docs/WEEKLY-GROWTH.md) |
+| Weekly execution plan | [`docs/WEEKLY-EXECUTION.md`](./docs/WEEKLY-EXECUTION.md) |
+| Measurement quality | [`docs/MEASUREMENT-QUALITY.md`](./docs/MEASUREMENT-QUALITY.md) |
 | App | [`apps/web`](./apps/web) |
 
 ---
@@ -41,6 +43,7 @@ Most AI tools invent posts from a blank prompt. DevPulse:
 12. Measures the privacy-safe funnel from impressions to clicks, conversions, and follower growth
 13. Observes production health, stage timings, cron freshness, and checkpoint-safe recovery
 14. Produces an approval-gated weekly continue/reduce/test plan from measured growth evidence
+15. Normalizes post-age checkpoints, prevents duplicate imports, and gates reviews on comparable 24-hour evidence
 
 ---
 
@@ -161,7 +164,7 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/posts` | History, search, filters |
 | `/posts/[id]` | Edit, approve, copy, screenshot, mark posted |
 | `/research` | Ingested sources |
-| `/analytics` | Actual performance, recommendations, and bulk CSV metric import |
+| `/analytics` | Performance, checkpoint queue, follower observations, quality alerts, and idempotent CSV imports |
 | `/experiments` | Controlled hook, ending, and X-format tests with approval-gated learning |
 | `/projects` | Owned-repository sync, noise audit, and approval-gated project facts |
 | `/engagement` | Manual conversation opportunities and locally saved reply drafts |
@@ -170,6 +173,7 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/attribution` | Tracked links, explicit conversions, funnel diagnosis, and CTA evidence |
 | `/operations` | Production service health, runtime history, deployment readiness, and recovery queue |
 | `/growth-review` | Historical seven-day comparisons and approval-gated continue, reduce, and test decisions |
+| `/execution` | Approval-gated seven-day anchor calendar, generation handoff, and measurement status |
 | `/r/[slug]` | Public privacy-safe aggregate redirect for user-created tracked links |
 | `/schedule` | Slot timeline |
 | `/settings` | Topics, writing style, cadence, timezone, models |
@@ -178,6 +182,10 @@ Guide: [`docs/DEPLOY-VERCEL.md`](./docs/DEPLOY-VERCEL.md).
 | `/api/operations/health` | Authenticated live dependency probes |
 | `/api/operations/recovery` | Authenticated checkpoint-safe retries |
 | `/api/growth-reviews` | Authenticated deterministic weekly evidence snapshot and decision generation |
+| `/api/measurement/followers` | Authenticated account-level follower and profile-view checkpoints |
+| `/api/execution-plans` | Authenticated weekly plan creation from the latest review |
+| `/api/execution-plans/[id]` | Plan approval, cancellation, and completion |
+| `/api/execution-plans/[id]/export` | Passive iCalendar download for active anchors |
 
 ### Post statuses
 
@@ -261,6 +269,10 @@ DevPulse AI/
 | 8 | Done | Manual distribution workflows, grounded reply assistance, relationship tracking and audience signals |
 | 9 | Done | Evidence-gated product campaigns, platform-native narrative stages and campaign analytics |
 | 10 | Done | Privacy-safe link attribution, explicit conversion evidence, funnel analytics and CTA experiments |
+| 11 | Done | Production health, stage telemetry, deployment validation and safe recovery |
+| 12 | Done | Deterministic weekly evidence reviews with approval-gated growth decisions |
+| 13 | Done | Comparable checkpoint queues, quality audits, follower observations and idempotent imports |
+| 14 | Done | Approval-gated seven-day anchor plans, calendar export and generation handoff |
 
 ---
 

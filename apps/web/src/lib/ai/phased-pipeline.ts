@@ -69,6 +69,12 @@ import {
   startOperationalRun,
   type OperationSource,
 } from "@/lib/operations/store";
+import {
+  executionContentItem,
+  executionContentItemForType,
+  linkExecutionDirective,
+  resolveExecutionDirective,
+} from "@/lib/execution-plan/service";
 
 export interface PhaseResult {
   jobId: string | null;
@@ -95,6 +101,7 @@ export interface PhasedJobMeta {
   generationJobId: string;
   /** Optional only for compatibility with jobs created before product-first research. */
   contentType?: ContentType;
+  executionPlanItemId?: string;
 }
 
 function log(logs: string[], message: string) {
@@ -260,6 +267,7 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
     };
   }
 
+  const executionDirective = await resolveExecutionDirective(userId, pick.scheduledFor, pick.slotIndex);
   const researchRun = await prisma.researchRun.create({
     data: { userId, status: "running" },
   });
@@ -280,10 +288,7 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
     },
   });
 
-  const contentType = contentTypeForSlot(
-    pick.slotIndex,
-    strategy.contentMix,
-  ).type;
+  const contentType = executionContentItem(executionDirective, strategy, pick.slotIndex).type;
   const meta: PhasedJobMeta = {
     kind: "phased_v1",
     slotIndex: pick.slotIndex,
@@ -292,6 +297,7 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
     totalChunks: researchChunkCount(contentType),
     generationJobId: job.id,
     contentType,
+    executionPlanItemId: executionDirective?.id,
   };
 
   await prisma.researchRun.update({
@@ -304,7 +310,7 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
 
   log(
     logs,
-    `Started phased job for slot ${pick.slotIndex + 1} · ${formatSlotDateTime(pick.scheduledFor, plan.timezone)} · mode=${pick.mode} · strategy=${contentType} · ${ownedProjectSources} owned projects + ${meta.totalChunks} targeted research chunks + 1 write`,
+    `Started phased job for slot ${pick.slotIndex + 1} · ${formatSlotDateTime(pick.scheduledFor, plan.timezone)} · mode=${pick.mode} · strategy=${contentType}${executionDirective ? ` · approved weekly anchor=${executionDirective.projectName || executionDirective.contentType}` : ""} · ${ownedProjectSources} owned projects + ${meta.totalChunks} targeted research chunks + 1 write`,
   );
   await appendJobLogs(job.id, logs);
 
@@ -444,6 +450,7 @@ async function runWritePhase(
 
   const slotIndex = meta.slotIndex;
   const scheduledFor = new Date(meta.scheduledFor);
+  const executionDirective = await resolveExecutionDirective(userId, scheduledFor, slotIndex);
 
   log(
     logs,
@@ -479,7 +486,7 @@ async function runWritePhase(
       .flatMap((t) => t.keywords.split(",").map((k) => k.trim()))
       .filter(Boolean);
 
-    const contentType = contentTypeForSlot(slotIndex, strategy.contentMix);
+    const contentType = executionContentItemForType(meta.contentType, strategy, slotIndex);
     const asRaw: RawSourceItem[] = filterSourcesForContentType(
       dbSources.map((s) => ({
         provider: s.provider as RawSourceItem["provider"],
@@ -538,13 +545,20 @@ async function runWritePhase(
       })
       .filter((x): x is { id: string; item: RawSourceItem } => Boolean(x));
 
-    const ordered = orderCandidatesForStrategy(candidates, {
+    let ordered = orderCandidatesForStrategy(candidates, {
       strategy,
       contentType: contentType.type,
       usedSourceIds,
       usedProviderCounts,
       maxPerProvider: MAX_POSTS_PER_PROVIDER_PER_DAY,
     });
+    if (executionDirective?.projectId) {
+      ordered = [...ordered].sort((a, b) => {
+        const aMatch = a.item.provider === "project" && a.item.externalId.includes(`:${executionDirective.projectId}:`);
+        const bMatch = b.item.provider === "project" && b.item.externalId.includes(`:${executionDirective.projectId}:`);
+        return Number(bMatch) - Number(aMatch);
+      });
+    }
 
     log(
       logs,
@@ -569,12 +583,19 @@ async function runWritePhase(
     const stylePrompt = style?.systemPrompt || DEFAULT_WRITING_STYLE.systemPrompt;
     const rules = style?.rules || DEFAULT_WRITING_STYLE.rules;
     const threshold = settings.qualityThreshold;
-    const angle = contentType.label || ANGLES[slotIndex % ANGLES.length]!;
+    const angle = executionDirective?.angle || contentType.label || ANGLES[slotIndex % ANGLES.length]!;
     const strategyPrompt = buildStrategyPrompt(strategy, contentType);
     const baseEngagementBrief = engagementBriefForSlot(slotIndex, contentType);
     const learning = await resolveGenerationLearning(userId, slotIndex, baseEngagementBrief);
     const engagementBrief = learning.brief;
     const recommendedMediaByPlatform = recommendedMediaTypeForContent(contentType, learning);
+    if (executionDirective?.mediaType === "carousel") {
+      recommendedMediaByPlatform.x = "branded_visual";
+      recommendedMediaByPlatform.linkedin = "carousel";
+    } else if (executionDirective?.mediaType === "branded_visual") {
+      recommendedMediaByPlatform.x = "branded_visual";
+      recommendedMediaByPlatform.linkedin = "branded_visual";
+    }
     if (learning.experiment) {
       log(
         logs,
@@ -660,7 +681,7 @@ async function runWritePhase(
           ),
       );
 
-      await prisma.post.create({
+      const createdPost = await prisma.post.create({
         data: {
           userId,
           platform: "both",
@@ -722,6 +743,7 @@ async function runWritePhase(
           },
         },
       });
+      await linkExecutionDirective(meta.executionPlanItemId ?? executionDirective?.id, createdPost.id);
       await markProjectFactUsed(source);
 
       produced = 1;

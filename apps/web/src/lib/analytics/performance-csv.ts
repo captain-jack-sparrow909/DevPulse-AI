@@ -10,6 +10,7 @@ export const PERFORMANCE_CSV_HEADERS = [
   "linkClicks",
   "followersBefore",
   "followersAfter",
+  "checkpoint",
   "capturedAt",
   "notes",
 ] as const;
@@ -26,6 +27,7 @@ export interface PerformanceCsvRecord {
   linkClicks: number;
   followersBefore: number | null;
   followersAfter: number | null;
+  checkpoint: "1h" | "24h" | "72h" | "7d" | "custom";
   capturedAt: Date;
   notes: string | null;
 }
@@ -64,7 +66,7 @@ function optionalInteger(value: string | undefined): number | null {
   return value == null || value.trim() === "" ? null : integer(value);
 }
 
-export function parsePerformanceCsv(csv: string): {
+export function parsePerformanceCsv(csv: string, defaultPlatform?: "x" | "linkedin"): {
   records: PerformanceCsvRecord[];
   errors: string[];
 } {
@@ -76,19 +78,27 @@ export function parsePerformanceCsv(csv: string): {
   if (!lines.length) return { records: [], errors: ["CSV is empty"] };
   const header = csvLine(lines[0]!);
   const index = new Map(header.map((name, position) => [name.trim().toLowerCase(), position]));
-  const required = ["postid", "platform"];
-  const missing = required.filter((name) => !index.has(name));
+  const required = defaultPlatform ? ["postid"] : ["postid", "platform"];
+  const missing = required.filter((name) => name === "postid"
+    ? !index.has("postid") && !index.has("devpulsepostid") && !index.has("devpulse_post_id")
+    : !index.has(name));
   if (missing.length) {
     return { records: [], errors: [`Missing required columns: ${missing.join(", ")}`] };
   }
-  const value = (columns: string[], name: string) => columns[index.get(name.toLowerCase()) ?? -1];
+  const value = (columns: string[], name: string, aliases: string[] = []) => {
+    for (const candidate of [name, ...aliases]) {
+      const position = index.get(candidate.toLowerCase());
+      if (position != null) return columns[position];
+    }
+    return undefined;
+  };
   const records: PerformanceCsvRecord[] = [];
   const errors: string[] = [];
   for (let lineIndex = 1; lineIndex < lines.length; lineIndex += 1) {
     const columns = csvLine(lines[lineIndex]!);
     const rowNumber = lineIndex + 1;
-    const postId = value(columns, "postId")?.trim() || "";
-    const platformValue = value(columns, "platform")?.trim().toLowerCase();
+    const postId = value(columns, "postId", ["devpulsePostId", "devpulse_post_id"])?.trim() || "";
+    const platformValue = defaultPlatform ?? value(columns, "platform")?.trim().toLowerCase();
     if (!postId) {
       errors.push(`Row ${rowNumber}: postId is required`);
       continue;
@@ -106,15 +116,18 @@ export function parsePerformanceCsv(csv: string): {
     records.push({
       postId,
       platform: platformValue,
-      impressions: integer(value(columns, "impressions")),
-      likes: integer(value(columns, "likes")),
-      replies: integer(value(columns, "replies")),
-      reposts: integer(value(columns, "reposts")),
-      saves: integer(value(columns, "saves")),
-      profileVisits: integer(value(columns, "profileVisits")),
-      linkClicks: integer(value(columns, "linkClicks")),
+      impressions: integer(value(columns, "impressions", ["views"])),
+      likes: integer(value(columns, "likes", ["reactions"])),
+      replies: integer(value(columns, "replies", ["comments"])),
+      reposts: integer(value(columns, "reposts", ["retweets", "shares"])),
+      saves: integer(value(columns, "saves", ["bookmarks"])),
+      profileVisits: integer(value(columns, "profileVisits", ["profile_views", "profile visits"])),
+      linkClicks: integer(value(columns, "linkClicks", ["urlClicks", "clicks", "link clicks"])),
       followersBefore: optionalInteger(value(columns, "followersBefore")),
       followersAfter: optionalInteger(value(columns, "followersAfter")),
+      checkpoint: (["1h", "24h", "72h", "7d"].includes(value(columns, "checkpoint")?.trim().toLowerCase() || "")
+        ? value(columns, "checkpoint")!.trim().toLowerCase()
+        : "custom") as PerformanceCsvRecord["checkpoint"],
       capturedAt,
       notes: value(columns, "notes")?.trim().slice(0, 1000) || null,
     });
@@ -143,10 +156,10 @@ export function performanceCsvTemplate(
       "0",
       "",
       "",
+      "24h",
       "",
       `24h snapshot — ${post.title}`,
     ]),
   );
   return [PERFORMANCE_CSV_HEADERS.join(","), ...rows.map((row) => row.map(escape).join(","))].join("\n");
 }
-

@@ -28,6 +28,7 @@ function group(key: string, posts: number, engagementRate: number, impressions =
 
 function evidence(overrides: Partial<WeeklyReviewEvidence> = {}): WeeklyReviewEvidence {
   return {
+    measurement: { due24h: 0, completed24h: 0, comparableCoverage: 0, comparablePosts: 0, confidence: "low", alerts: 0 },
     current: { summary: summary(), byPlatform: [], byContentType: [], byProject: [], byMediaType: [] },
     previous: { summary: summary(), byPlatform: [], byContentType: [], byProject: [], byMediaType: [] },
     attribution: { impressions: 0, clicks: 0, conversions: 0, clickRate: 0, conversionRate: 0 },
@@ -50,6 +51,7 @@ test("sparse reviews always produce continue, reduce, and test without mutating 
 
 test("a large repeated gap proposes a one-slot content mix shift", () => {
   const review = buildWeeklyReview(evidence({
+    measurement: { due24h: 20, completed24h: 18, comparableCoverage: 90, comparablePosts: 12, confidence: "high", alerts: 0 },
     current: {
       summary: summary({ trackedPosts: 12, platformSnapshots: 20, impressions: 8_000, engagements: 240, engagementRate: 3 }),
       byPlatform: [group("x", 6, 2), group("linkedin", 6, 4)],
@@ -67,6 +69,7 @@ test("a large repeated gap proposes a one-slot content mix shift", () => {
 
 test("a weak tracked-link funnel proposes a draft CTA experiment", () => {
   const review = buildWeeklyReview(evidence({
+    measurement: { due24h: 12, completed24h: 10, comparableCoverage: 83.3, comparablePosts: 8, confidence: "medium", alerts: 0 },
     current: {
       summary: summary({ trackedPosts: 8, platformSnapshots: 12, impressions: 4_000, engagements: 100, engagementRate: 2.5 }),
       byPlatform: [group("x", 4, 2), group("linkedin", 4, 3)],

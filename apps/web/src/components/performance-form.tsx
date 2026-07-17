@@ -18,6 +18,7 @@ export interface PerformanceSnapshotView {
   followersBefore: number | null;
   followersAfter: number | null;
   capturedAt: string;
+  checkpoint?: string;
 }
 
 const METRICS = [
@@ -45,6 +46,7 @@ export function PerformanceForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [platform, setPlatform] = useState<"x" | "linkedin">("x");
+  const [checkpoint, setCheckpoint] = useState<"1h" | "24h" | "72h" | "7d" | "custom">("24h");
 
   async function submit(formData: FormData) {
     setSaving(true);
@@ -54,7 +56,7 @@ export function PerformanceForm({
       const response = await fetch(`/api/posts/${postId}/performance`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, platform }),
+        body: JSON.stringify({ ...payload, platform, checkpoint }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save metrics");
@@ -85,6 +87,16 @@ export function PerformanceForm({
             </button>
           ))}
         </div>
+        <label className="block max-w-xs space-y-1 text-xs text-zinc-500">
+          <span>Measurement checkpoint</span>
+          <select value={checkpoint} onChange={(event) => setCheckpoint(event.target.value as typeof checkpoint)} className="h-10 w-full rounded-xl border border-white/10 bg-[#0d0f14] px-3 text-sm text-zinc-200 outline-none focus:border-teal-400/40">
+            <option value="1h">1 hour — early reach</option>
+            <option value="24h">24 hours — primary comparison</option>
+            <option value="72h">72 hours — secondary distribution</option>
+            <option value="7d">7 days — long tail</option>
+            <option value="custom">Custom / outside checkpoint</option>
+          </select>
+        </label>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {METRICS.map(([name, label]) => (
             <label key={name} className="space-y-1 text-xs text-zinc-500">
@@ -137,7 +149,7 @@ export function PerformanceForm({
               <span className="text-zinc-500">
                 {engagementRate.toFixed(2)}% engagement
                 {followers != null ? ` · ${followers >= 0 ? "+" : ""}${followers} followers` : ""}
-                {` · ${new Date(snapshot.capturedAt).toLocaleDateString()}`}
+                {` · ${snapshot.checkpoint || "custom"} · ${new Date(snapshot.capturedAt).toLocaleDateString()}`}
               </span>
             </div>
           );
@@ -146,4 +158,3 @@ export function PerformanceForm({
     </div>
   );
 }
-

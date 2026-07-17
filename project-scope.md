@@ -422,6 +422,20 @@ Phase 12 — completed
 - Exactly three approval-gated continue, reduce, and test decisions
 - Safe content-mix changes with stale-review protection and draft-only experiment creation
 - Historical review evidence, next-week briefs, and PDF/CSV exports
+
+Phase 13 — completed
+- 1h, 24h, 72h, and 7d capture queue for X and LinkedIn
+- Comparable-age coverage and deterministic snapshot quality alerts
+- Idempotent DevPulse, X, and LinkedIn CSV imports with audit history
+- Explicit account follower and profile-view checkpoints
+- Weekly-review decisions gated on valid 24-hour cohorts and coverage confidence
+
+Phase 14 — completed
+- Deterministic seven-day execution plans generated from persisted weekly reviews
+- One product-first anchor per day while remaining slots keep the approved content strategy
+- Individual rejection, whole-plan approval, cancellation, skipping, and completion controls
+- Approved anchors guide matching slot generation without bypassing draft review or manual publishing
+- Passive iCalendar export plus explicit publish and valid-24h measurement confirmation
 ```
 
 ## One additional recommendation

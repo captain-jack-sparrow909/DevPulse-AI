@@ -7,6 +7,7 @@ import { getContentStrategy } from "@/lib/content/strategy-store";
 import { getExperimentViews } from "@/lib/experiments/service";
 import { EXPERIMENT_DIMENSIONS } from "@/lib/experiments/definitions";
 import { buildOperationsReport } from "@/lib/operations/report";
+import { buildMeasurementQueue, measurementAlerts, measurementCoverage, selectComparableCheckpointRecords } from "@/lib/measurement/quality";
 import {
   buildWeeklyReview,
   type WeeklyReviewAction,
@@ -73,7 +74,7 @@ export async function createWeeklyGrowthReview(userId: string, now = new Date())
   const comparisonStart = new Date(now.getTime() - 14 * DAY);
   const strategy = await getContentStrategy(userId);
 
-  const [snapshotRows, links, conversions, workflows, experimentViews, operations, health, campaignRows] = await Promise.all([
+  const [snapshotRows, links, conversions, workflows, experimentViews, operations, health, campaignRows, measurementPostRows] = await Promise.all([
     prisma.socialPerformanceSnapshot.findMany({
       where: {
         userId,
@@ -135,6 +136,16 @@ export async function createWeeklyGrowthReview(userId: string, now = new Date())
         items: { select: { postId: true } },
       },
     }),
+    prisma.post.findMany({
+      where: { userId, status: "posted_manually", postedManuallyAt: { gte: comparisonStart, lte: periodEnd } },
+      select: {
+        id: true,
+        title: true,
+        hook: true,
+        postedManuallyAt: true,
+        performanceSnapshots: { orderBy: { capturedAt: "asc" } },
+      },
+    }),
   ]);
 
   const allRecords = snapshotRows.map(performanceRecord);
@@ -146,7 +157,21 @@ export async function createWeeklyGrowthReview(userId: string, now = new Date())
     const postedAt = record.post.postedManuallyAt;
     return postedAt && postedAt >= comparisonStart && postedAt < periodStart;
   });
-  const currentLatest = buildPerformanceReport(currentRecords, timezone).latestRecords;
+  const postedAtByPost = new Map(allRecords.flatMap((record) => record.post.postedManuallyAt ? [[record.postId, record.post.postedManuallyAt] as const] : []));
+  const currentComparable = selectComparableCheckpointRecords(currentRecords, postedAtByPost, "24h");
+  const previousComparable = selectComparableCheckpointRecords(previousRecords, postedAtByPost, "24h");
+  const currentLatest = buildPerformanceReport(currentComparable, timezone).latestRecords;
+  const measurementPosts = measurementPostRows.flatMap((post) => post.postedManuallyAt ? [{
+    id: post.id,
+    label: post.title || post.hook || "Untitled post",
+    postedAt: post.postedManuallyAt,
+    snapshots: post.performanceSnapshots,
+  }] : []);
+  const measurementTasks = buildMeasurementQueue(measurementPosts, periodEnd);
+  const currentPostIds = new Set(measurementPostRows.filter((post) => post.postedManuallyAt && post.postedManuallyAt >= periodStart).map((post) => post.id));
+  const currentTasks = measurementTasks.filter((task) => currentPostIds.has(task.postId));
+  const measurement = measurementCoverage(currentTasks);
+  const qualityAlerts = measurementAlerts(measurementPosts).filter((alert) => currentPostIds.has(alert.postId));
   const linkInputs = links.map((link) => ({
     id: link.id,
     platform: link.platform,
@@ -197,8 +222,16 @@ export async function createWeeklyGrowthReview(userId: string, now = new Date())
   };
 
   const evidence: WeeklyReviewEvidence = {
-    current: periodPerformance(currentRecords, timezone),
-    previous: periodPerformance(previousRecords, timezone),
+    measurement: {
+      due24h: measurement.due24h,
+      completed24h: measurement.completed24h,
+      comparableCoverage: measurement.comparableCoverage,
+      comparablePosts: measurement.comparablePosts,
+      confidence: measurement.confidence,
+      alerts: qualityAlerts.length,
+    },
+    current: periodPerformance(currentComparable, timezone),
+    previous: periodPerformance(previousComparable, timezone),
     attribution: {
       impressions: attribution.funnel.impressions,
       clicks: attribution.funnel.clicks,

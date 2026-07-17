@@ -60,6 +60,9 @@ export async function POST(
   if (Number.isNaN(capturedAt.getTime())) {
     return NextResponse.json({ error: "Invalid capture time" }, { status: 400 });
   }
+  const checkpoint = ["1h", "24h", "72h", "7d"].includes(String(body.checkpoint))
+    ? String(body.checkpoint)
+    : "custom";
 
   const snapshot = await prisma.socialPerformanceSnapshot.create({
     data: {
@@ -75,10 +78,11 @@ export async function POST(
       linkClicks: metric(body.linkClicks),
       followersBefore: optionalMetric(body.followersBefore),
       followersAfter: optionalMetric(body.followersAfter),
+      checkpoint,
+      source: "manual",
       notes: typeof body.notes === "string" ? body.notes.trim().slice(0, 1000) || null : null,
       capturedAt,
     },
   });
   return NextResponse.json({ snapshot }, { status: 201 });
 }
-

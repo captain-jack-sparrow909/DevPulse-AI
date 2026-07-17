@@ -39,7 +39,6 @@ import {
 import { getContentStrategy } from "@/lib/content/strategy-store";
 import {
   buildStrategyPrompt,
-  contentTypeForSlot,
   orderCandidatesForStrategy,
   strategyFromRecord,
 } from "@/lib/content/strategy";
@@ -59,6 +58,11 @@ import {
   recommendedMediaTypeForContent,
   resolveGenerationLearning,
 } from "@/lib/experiments/service";
+import {
+  executionContentItem,
+  linkExecutionDirective,
+  resolveExecutionDirective,
+} from "@/lib/execution-plan/service";
 
 export interface PipelineOptions {
   userId: string;
@@ -553,6 +557,10 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     options.onLog,
   );
   log(logs, "Fresh research for this slot only (not batching all 12)", options.onLog);
+  const executionDirective = await resolveExecutionDirective(options.userId, scheduledFor, slotIndex);
+  if (executionDirective) {
+    log(logs, `Approved weekly anchor: ${executionDirective.projectName || executionDirective.contentType} · ${executionDirective.objective}`, options.onLog);
+  }
 
   const [topics, style] = await Promise.all([
     prisma.topic.findMany({ where: { userId: options.userId, active: true } }),
@@ -588,7 +596,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     const researchMode = options.researchMode ?? "fast";
     const skipScreenshot =
       options.skipScreenshot ?? researchMode === "fast";
-    const contentType = contentTypeForSlot(slotIndex, strategy.contentMix);
+    const contentType = executionContentItem(executionDirective, strategy, slotIndex);
     log(
       logs,
       `Collecting sources (${researchMode} mode) · ${describeSourcePolicy(contentType.type)}`,
@@ -697,13 +705,20 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     }
 
     // Slot lane rotation + daily provider quotas (not pure score — GitHub stars used to win every time)
-    const ordered = orderCandidatesForStrategy([...poolMap.values()], {
+    let ordered = orderCandidatesForStrategy([...poolMap.values()], {
       strategy,
       contentType: contentType.type,
       usedSourceIds,
       usedProviderCounts,
       maxPerProvider: MAX_POSTS_PER_PROVIDER_PER_DAY,
     });
+    if (executionDirective?.projectId) {
+      ordered = [...ordered].sort((a, b) => {
+        const aMatch = a.item.provider === "project" && a.item.externalId.includes(`:${executionDirective.projectId}:`);
+        const bMatch = b.item.provider === "project" && b.item.externalId.includes(`:${executionDirective.projectId}:`);
+        return Number(bMatch) - Number(aMatch);
+      });
+    }
 
     log(
       logs,
@@ -757,12 +772,19 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     const threshold = settings.qualityThreshold;
     // Every slot pack is dual-format: LinkedIn long-form + X thread (≤280 each)
     void platforms; // reserved for future per-platform toggles
-    const angle = contentType.label || pickAngle(slotIndex);
+    const angle = executionDirective?.angle || contentType.label || pickAngle(slotIndex);
     const strategyPrompt = buildStrategyPrompt(strategy, contentType);
     const baseEngagementBrief = engagementBriefForSlot(slotIndex, contentType);
     const learning = await resolveGenerationLearning(options.userId, slotIndex, baseEngagementBrief);
     const engagementBrief = learning.brief;
     const recommendedMediaByPlatform = recommendedMediaTypeForContent(contentType, learning);
+    if (executionDirective?.mediaType === "carousel") {
+      recommendedMediaByPlatform.x = "branded_visual";
+      recommendedMediaByPlatform.linkedin = "carousel";
+    } else if (executionDirective?.mediaType === "branded_visual") {
+      recommendedMediaByPlatform.x = "branded_visual";
+      recommendedMediaByPlatform.linkedin = "branded_visual";
+    }
     if (learning.experiment) {
       log(
         logs,
@@ -926,7 +948,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         log(logs, `No screenshot: ${imageDecision.reason}`, options.onLog);
       }
 
-      await prisma.$transaction([
+      const [createdPost] = await prisma.$transaction([
         prisma.post.create({
           data: {
           userId: options.userId,
@@ -1005,6 +1027,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           },
         }),
       ]);
+      await linkExecutionDirective(executionDirective?.id, createdPost.id);
       await markProjectFactUsed(source);
 
       produced = 1;

@@ -11,6 +11,8 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BulkPerformanceImport } from "@/components/bulk-performance-import";
+import { MeasurementDashboard } from "@/components/measurement-dashboard";
+import { buildMeasurementQueue, measurementAlerts, measurementCoverage } from "@/lib/measurement/quality";
 
 function BreakdownTable({
   title,
@@ -74,7 +76,7 @@ function BreakdownTable({
 export default async function AnalyticsPage() {
   const session = await requireUser();
   const userId = session.user.id;
-  const [snapshots, settings, recentPosted] = await Promise.all([
+  const [snapshots, settings, recentPosted, followerCheckpoints, imports] = await Promise.all([
     prisma.socialPerformanceSnapshot.findMany({
       where: { userId },
       orderBy: { capturedAt: "desc" },
@@ -106,9 +108,17 @@ export default async function AnalyticsPage() {
     prisma.post.findMany({
       where: { userId, status: "posted_manually" },
       orderBy: { postedManuallyAt: "desc" },
-      take: 20,
-      select: { id: true, title: true, hook: true },
+      take: 30,
+      select: {
+        id: true,
+        title: true,
+        hook: true,
+        postedManuallyAt: true,
+        performanceSnapshots: { orderBy: { capturedAt: "asc" } },
+      },
     }),
+    prisma.followerCheckpoint.findMany({ where: { userId }, orderBy: { capturedAt: "desc" }, take: 50 }),
+    prisma.performanceImportRun.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 20 }),
   ]);
   const records = snapshots
     .filter((snapshot) => snapshot.platform === "x" || snapshot.platform === "linkedin")
@@ -117,6 +127,15 @@ export default async function AnalyticsPage() {
       platform: snapshot.platform as "x" | "linkedin",
     })) satisfies PerformanceRecord[];
   const report = buildPerformanceReport(records, settings?.timezone || "Asia/Dubai");
+  const measurementPosts = recentPosted.flatMap((post) => post.postedManuallyAt ? [{
+    id: post.id,
+    label: post.title || post.hook || "Untitled post",
+    postedAt: post.postedManuallyAt,
+    snapshots: post.performanceSnapshots,
+  }] : []);
+  const measurementTasks = buildMeasurementQueue(measurementPosts);
+  const coverage = measurementCoverage(measurementTasks);
+  const alerts = measurementAlerts(measurementPosts);
   const summary = report.summary;
   const stats = [
     ["Tracked posts", summary.trackedPosts.toLocaleString(), `${summary.platformSnapshots} platform records`],
@@ -148,6 +167,28 @@ export default async function AnalyticsPage() {
           </Card>
         ))}
       </div>
+
+      <MeasurementDashboard
+        now={new Date().toISOString()}
+        coverage={coverage}
+        tasks={measurementTasks.map((task) => ({ ...task, dueAt: task.dueAt.toISOString() }))}
+        alerts={alerts}
+        followerCheckpoints={followerCheckpoints.map((item) => ({
+          id: item.id,
+          platform: item.platform,
+          followers: item.followers,
+          profileViews: item.profileViews,
+          capturedAt: item.capturedAt.toISOString(),
+        }))}
+        imports={imports.map((item) => ({
+          id: item.id,
+          format: item.format,
+          rowCount: item.rowCount,
+          importedCount: item.importedCount,
+          duplicateCount: item.duplicateCount,
+          createdAt: item.createdAt.toISOString(),
+        }))}
+      />
 
       <Card className="border-teal-500/15 bg-teal-500/[0.03]">
         <CardHeader>

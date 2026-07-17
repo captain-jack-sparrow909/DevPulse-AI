@@ -25,5 +25,17 @@ test("prefilled template creates separate X and LinkedIn rows", () => {
   const parsed = parsePerformanceCsv(csv);
   assert.deepEqual(parsed.errors, []);
   assert.deepEqual(parsed.records.map((record) => record.platform), ["x", "linkedin"]);
+  assert.ok(parsed.records.every((record) => record.checkpoint === "24h"));
 });
 
+test("platform CSV mode accepts common X metric aliases with explicit DevPulse IDs", () => {
+  const parsed = parsePerformanceCsv(
+    "devpulsePostId,views,reactions,comments,retweets,bookmarks,clicks,checkpoint,capturedAt\npost-1,500,10,2,3,4,5,24h,2026-07-16T12:00:00Z",
+    "x",
+  );
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(parsed.records[0]?.platform, "x");
+  assert.equal(parsed.records[0]?.impressions, 500);
+  assert.equal(parsed.records[0]?.reposts, 3);
+  assert.equal(parsed.records[0]?.saves, 4);
+});
