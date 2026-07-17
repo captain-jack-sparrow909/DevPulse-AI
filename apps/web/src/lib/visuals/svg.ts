@@ -1,4 +1,5 @@
 import type { BrandConfig, VisualBrief } from "@/lib/visuals/types";
+import { VISUAL_FONT_FAMILY } from "@/lib/visuals/fonts";
 
 const WIDTH = 1200;
 const HEIGHT = 1500;
@@ -73,7 +74,7 @@ function textBlock(
   fill: string,
   weight = 500,
 ): string {
-  return `<text x="${x}" y="${y}" fill="${fill}" font-family="Inter, Arial, sans-serif" font-size="${fontSize}" font-weight="${weight}">${lines
+  return `<text x="${x}" y="${y}" fill="${fill}" font-family="${VISUAL_FONT_FAMILY}" font-size="${fontSize}" font-weight="${weight}">${lines
     .map((line, index) => `<tspan x="${x}" dy="${index === 0 ? 0 : lineHeight}">${xml(line)}</tspan>`)
     .join("")}</text>`;
 }
@@ -106,7 +107,7 @@ export function renderVisualSvg(input: {
   if (mode === "takeaway") {
     body = `
       <rect x="84" y="650" width="1032" height="390" rx="34" fill="#ffffff" fill-opacity="0.055" stroke="#ffffff" stroke-opacity="0.11"/>
-      <text x="132" y="720" fill="${brand.accentColor}" font-family="ui-monospace, SFMono-Regular, monospace" font-size="24" font-weight="700" letter-spacing="3">PRACTICAL TAKEAWAY</text>
+      <text x="132" y="720" fill="${brand.accentColor}" font-family="${VISUAL_FONT_FAMILY}" font-size="24" font-weight="700" letter-spacing="3">PRACTICAL TAKEAWAY</text>
       ${textBlock(wrapVisualText(brief.takeaway, 42, 6), 132, 800, 44, 62, brand.textColor, 600)}
     `;
   } else if (mode === "details") {
@@ -133,15 +134,15 @@ export function renderVisualSvg(input: {
     <rect width="1200" height="1500" fill="url(#grid)"/>
     <rect x="48" y="48" width="1104" height="1404" rx="38" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
     <rect x="84" y="92" width="10" height="40" rx="5" fill="${brand.accentColor}"/>
-    <text x="116" y="121" fill="${brand.accentColor}" font-family="ui-monospace, SFMono-Regular, monospace" font-size="22" font-weight="700" letter-spacing="3">${xml(brief.eyebrow.toUpperCase())}</text>
-    <text x="1116" y="121" text-anchor="end" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, monospace" font-size="20">${xml(brief.project)}</text>
+    <text x="116" y="121" fill="${brand.accentColor}" font-family="${VISUAL_FONT_FAMILY}" font-size="22" font-weight="700" letter-spacing="3">${xml(brief.eyebrow.toUpperCase())}</text>
+    <text x="1116" y="121" text-anchor="end" fill="#94a3b8" font-family="${VISUAL_FONT_FAMILY}" font-size="20">${xml(brief.project)}</text>
     ${textBlock(layout.titleLines, 84, layout.titleY, layout.titleFontSize, layout.titleLineHeight, brand.textColor, 760)}
     ${supportingContext}
     <rect x="84" y="650" width="180" height="6" rx="3" fill="${brand.accentColor}"/>
     ${body}
     <line x1="84" y1="1324" x2="1116" y2="1324" stroke="#ffffff" stroke-opacity="0.09"/>
-    <text x="84" y="1385" fill="${brand.textColor}" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="650">${xml(brand.displayName)}</text>
-    <text x="84" y="1420" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="21">${xml(handle)} · ${xml(brand.footerText)}</text>
-    ${input.slideNumber && input.slideCount ? `<text x="1116" y="1405" text-anchor="end" fill="${brand.accentColor}" font-family="ui-monospace, SFMono-Regular, monospace" font-size="24" font-weight="700">${input.slideNumber}/${input.slideCount}</text>` : ""}
+    <text x="84" y="1385" fill="${brand.textColor}" font-family="${VISUAL_FONT_FAMILY}" font-size="26" font-weight="650">${xml(brand.displayName)}</text>
+    <text x="84" y="1420" fill="#94a3b8" font-family="${VISUAL_FONT_FAMILY}" font-size="21">${xml(handle)} · ${xml(brand.footerText)}</text>
+    ${input.slideNumber && input.slideCount ? `<text x="1116" y="1405" text-anchor="end" fill="${brand.accentColor}" font-family="${VISUAL_FONT_FAMILY}" font-size="24" font-weight="700">${input.slideNumber}/${input.slideCount}</text>` : ""}
   </svg>`;
 }

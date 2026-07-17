@@ -1,9 +1,12 @@
-import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { renderVisualSvg } from "@/lib/visuals/svg";
+import { ensureVisualFonts } from "@/lib/visuals/fonts";
 import type { BrandConfig, RenderedVisual, VisualAssetKind, VisualBrief } from "@/lib/visuals/types";
 
 async function png(svg: string): Promise<Buffer> {
+  await ensureVisualFonts();
+  // Fontconfig must be configured before Sharp initializes libvips/Pango.
+  const { default: sharp } = await import("sharp");
   return sharp(Buffer.from(svg)).png({ compressionLevel: 9, palette: true, quality: 90 }).toBuffer();
 }
 
@@ -70,4 +73,3 @@ export async function renderVisualAsset(
     height: 1500,
   };
 }
-

@@ -8,6 +8,7 @@ import {
   wrapVisualText,
 } from "@/lib/visuals/svg";
 import type { BrandConfig } from "@/lib/visuals/types";
+import { VISUAL_FONT_FAMILY } from "@/lib/visuals/fonts";
 
 const brand: BrandConfig = {
   displayName: "Jabir Khan",
@@ -59,6 +60,12 @@ test("SVG renderer escapes user-controlled text", () => {
   });
   assert.match(svg, /IPC &lt; HTTP &amp; ports/);
   assert.doesNotMatch(svg, /IPC < HTTP & ports/);
+});
+
+test("SVG renderer uses the bundled production font instead of host fallbacks", () => {
+  const svg = renderVisualSvg({ brief, brand });
+  assert.match(svg, new RegExp(`font-family="${VISUAL_FONT_FAMILY}"`));
+  assert.doesNotMatch(svg, /font-family="(?:Inter|Arial|ui-monospace)/);
 });
 
 test("long PNG titles reserve space before supporting context", () => {
