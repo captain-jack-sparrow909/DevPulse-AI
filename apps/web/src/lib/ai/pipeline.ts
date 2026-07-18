@@ -25,11 +25,7 @@ import {
   listStaleMissedDueSlots,
   pickSlotForGeneration,
 } from "@/lib/schedule/slots";
-import {
-  clearSlotForRegenerate,
-  getOccupiedSlotIndexes,
-  skipSlot,
-} from "@/lib/schedule/slot-actions";
+import { getOccupiedSlotIndexes, skipSlot } from "@/lib/schedule/slot-actions";
 import { capturePageScreenshot, shouldIncludeImage } from "@/lib/screenshots/capture";
 import {
   enforceXLimit,
@@ -67,6 +63,7 @@ import {
   effectivePostsPerDay,
   generationCooldownReason,
   generationQualityGate,
+  manualRegenerationQualityGate,
   projectKeyFromSource,
 } from "@/lib/publishing/adaptive";
 
@@ -359,7 +356,9 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     }
   }
 
-  // Regenerate: clear existing post for the slot, then write a new one with fresh research
+  // Regenerate: identify the old post now, but only replace it atomically after
+  // a new draft has cleared the manual safety gates.
+  let regeneratePostIds: string[] = [];
   if (options.regenerate) {
     if (options.slotIndex === undefined) {
       return {
@@ -372,14 +371,23 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         skipReason: "Pick a slot to regenerate",
       };
     }
-    const cleared = await clearSlotForRegenerate(
-      options.userId,
-      options.slotIndex,
-      settings.timezone,
-    );
+    const { start, end } = dayBoundsUtc(now, settings.timezone);
+    const existingPosts = await prisma.post.findMany({
+      where: {
+        userId: options.userId,
+        schedule: {
+          is: {
+            slotIndex: options.slotIndex,
+            scheduledFor: { gte: start, lte: end },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    regeneratePostIds = existingPosts.map((post) => post.id);
     log(
       logs,
-      `Regenerate: cleared ${cleared.deleted} post(s) for slot ${options.slotIndex + 1}`,
+      `Regenerate: ${regeneratePostIds.length} existing post(s) will be replaced only after a new draft is ready for slot ${options.slotIndex + 1}`,
       options.onLog,
     );
     log(
@@ -655,6 +663,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         where: {
           post: {
             userId: options.userId,
+            ...(regeneratePostIds.length > 0 ? { id: { notIn: regeneratePostIds } } : {}),
             createdAt: { gte: start, lte: end },
             status: { not: "skipped" },
           },
@@ -665,7 +674,10 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         },
       }),
       prisma.post.findMany({
-        where: { userId: options.userId },
+        where: {
+          userId: options.userId,
+          ...(regeneratePostIds.length > 0 ? { id: { notIn: regeneratePostIds } } : {}),
+        },
         select: {
           contentHash: true,
           hook: true,
@@ -918,9 +930,19 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
 
       const adaptiveGate = generationQualityGate(scores, settings);
       if (adaptiveGate.length > 0) {
-        lastError = `Adaptive quality gate: ${adaptiveGate.join("; ")}`;
-        log(logs, `${lastError} — trying next source…`, options.onLog);
-        continue;
+        const manualGate = options.regenerate
+          ? manualRegenerationQualityGate(scores, settings)
+          : adaptiveGate;
+        if (manualGate.length > 0) {
+          lastError = `${options.regenerate ? "Manual quality floor" : "Adaptive quality gate"}: ${manualGate.join("; ")}`;
+          log(logs, `${lastError} — trying next source…`, options.onLog);
+          continue;
+        }
+        log(
+          logs,
+          `Manual regenerate: draft is below the automatic scheduling target (${adaptiveGate.join("; ")}) but above the manual review floor`,
+          options.onLog,
+        );
       }
 
       const engagementFloor = researchMode === "fast" ? 5.8 : 6.5;
@@ -1068,6 +1090,12 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           },
           },
         }),
+        prisma.post.deleteMany({
+          where: {
+            userId: options.userId,
+            id: { in: regeneratePostIds },
+          },
+        }),
         prisma.generationJob.update({
           where: { id: job.id },
           data: {
@@ -1086,7 +1114,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     }
 
     if (produced === 0) {
-      if (settings.adaptiveCadenceEnabled) {
+      if (settings.adaptiveCadenceEnabled && !options.regenerate) {
         const reason = `Adaptive quality gate skipped this slot: ${lastError || "no candidate cleared the publishing bar"}`;
         await skipSlot(options.userId, slotIndex, reason);
         await prisma.generationJob.update({
@@ -1112,7 +1140,11 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           scheduledFor: scheduledFor.toISOString(),
         };
       }
-      throw new Error(lastError || "Could not produce a quality post for this slot");
+      throw new Error(
+        options.regenerate
+          ? `Manual regeneration could not produce a safe replacement: ${lastError || "no candidate cleared the manual review floor"}. The existing post was preserved.`
+          : lastError || "Could not produce a quality post for this slot",
+      );
     }
 
     log(

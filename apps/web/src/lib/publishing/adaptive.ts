@@ -138,6 +138,25 @@ export function generationQualityGate(
   return reasons;
 }
 
+/**
+ * Manual replacement still has a quality floor, but it is intentionally lower
+ * than the automatic publishing bar because the result always returns to human
+ * review. Grounding and duplicate checks remain separate hard gates.
+ */
+export function manualRegenerationQualityGate(
+  scores: { overall: number; novelty: number },
+  settings: Pick<
+    AdaptiveCadenceSettings,
+    "adaptiveCadenceEnabled" | "qualityThreshold" | "minimumNovelty"
+  >,
+): string[] {
+  return generationQualityGate(scores, {
+    ...settings,
+    qualityThreshold: Math.max(6.5, settings.qualityThreshold - 1.5),
+    minimumNovelty: Math.max(5.5, settings.minimumNovelty - 1.5),
+  });
+}
+
 export function generationCooldownReason(input: {
   sourceProjectKey: string | null;
   contentType: string;

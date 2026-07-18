@@ -6,6 +6,7 @@ import {
   generationCooldownReason,
   generationQualityGate,
   linkedInPublishingDays,
+  manualRegenerationQualityGate,
   type AdaptiveCadenceSettings,
   type PublishingCandidate,
 } from "./adaptive";
@@ -77,6 +78,18 @@ test("only an explicit manual replacement bypasses generation cooldowns", () => 
 
   assert.match(generationCooldownReason(input) || "", /36h cooldown/);
   assert.equal(generationCooldownReason({ ...input, bypassCooldown: true }), null);
+});
+
+test("manual replacement accepts a reviewable draft below the automatic scheduling bar", () => {
+  assert.deepEqual(
+    generationQualityGate({ overall: 7.8, novelty: 6.9 }, settings),
+    ["quality 7.8 < 8.0", "novelty 6.9 < 7.0"],
+  );
+  assert.deepEqual(manualRegenerationQualityGate({ overall: 7.8, novelty: 6.9 }, settings), []);
+  assert.deepEqual(
+    manualRegenerationQualityGate({ overall: 6.2, novelty: 5.2 }, settings),
+    ["quality 6.2 < 6.5", "novelty 5.2 < 5.5"],
+  );
 });
 
 test("four LinkedIn posts are intentionally spread across the week", () => {
