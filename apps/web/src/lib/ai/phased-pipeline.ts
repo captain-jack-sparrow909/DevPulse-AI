@@ -61,6 +61,12 @@ import {
   type DualDraft,
   type EngagementBrief,
 } from "@/lib/content/engagement";
+import {
+  findNearDuplicateDraft,
+  ideaFingerprintForSource,
+  prepareHistoricalDrafts,
+  usedIdeaPostMap,
+} from "@/lib/content/deduplication";
 import { upsertResearchSources } from "@/lib/research/source-store";
 import { filterSourcesForContentType } from "@/lib/research/source-policy";
 import {
@@ -609,18 +615,45 @@ async function runWritePhase(
     const recentPosts = await prisma.post.findMany({
       where: { userId },
       select: {
+        id: true,
+        title: true,
         contentHash: true,
+        ideaFingerprint: true,
         hook: true,
         content: true,
+        contentLinkedIn: true,
+        threadJson: true,
         contentType: true,
         createdAt: true,
         sources: {
-          select: { source: { select: { externalId: true, title: true } } },
+          select: {
+            source: { select: { provider: true, externalId: true, title: true } },
+          },
         },
       },
       take: 500,
       orderBy: { createdAt: "desc" },
     });
+    const duplicateHistory = prepareHistoricalDrafts(
+      recentPosts.map((post) => ({
+        ...post,
+        sources: post.sources.map(({ source }) => source),
+      })),
+    );
+    const usedIdeas = usedIdeaPostMap(duplicateHistory);
+    const candidatesBeforeIdeaGuard = ordered.length;
+    ordered = ordered.filter(({ item }) =>
+      !usedIdeas.has(ideaFingerprintForSource(item)),
+    );
+    const blockedIdeas = candidatesBeforeIdeaGuard - ordered.length;
+    if (blockedIdeas > 0) {
+      log(
+        logs,
+        `Duplicate guard: removed ${blockedIdeas} source/fact candidate(s) that already produced a post`,
+      );
+    }
+    const duplicatePoolExhausted = ordered.length === 0;
+
     const existingHashes = new Set(recentPosts.map((post) => post.contentHash));
     const recentHooks = recentPosts
       .map((post) => post.hook || post.content.split("\n")[0] || "")
@@ -653,11 +686,14 @@ async function runWritePhase(
     }
 
     let produced = 0;
-    let lastError = "";
+    let lastError = duplicatePoolExhausted
+      ? "Duplicate guard exhausted the candidate pool — fresh repository evidence or a new source is required"
+      : "";
 
     for (let attempt = 0; attempt < Math.min(5, ordered.length); attempt++) {
       const picked = ordered[attempt]!;
       const source = picked.item;
+      const ideaFingerprint = ideaFingerprintForSource(source);
       if (!executionDirective) {
         const cooldown = generationCooldownReason({
           sourceProjectKey: projectKeyFromSource(source.externalId, source.title),
@@ -718,6 +754,17 @@ async function runWritePhase(
         continue;
       }
 
+      const duplicate = findNearDuplicateDraft(
+        draft,
+        ideaFingerprint,
+        duplicateHistory,
+      );
+      if (duplicate) {
+        lastError = `Duplicate guard: ${duplicate.reason} (post ${duplicate.postId}, ${Math.round(duplicate.similarity * 100)}% similar)`;
+        log(logs, `Reject ${lastError}, next source…`);
+        continue;
+      }
+
       const scores = scoreDualDraft(draft, audit);
 
       const adaptiveGate = generationQualityGate(scores, settings);
@@ -772,6 +819,7 @@ async function runWritePhase(
           threadJson: JSON.stringify(draft.xThread),
           status: "pending_review",
           contentHash: hash,
+          ideaFingerprint,
           topicId: topicMatch?.id,
           writingStyleId: style?.id,
           researchRunId,
@@ -836,7 +884,7 @@ async function runWritePhase(
 
     if (produced === 0) {
       if (settings.adaptiveCadenceEnabled) {
-        const reason = `Adaptive quality gate skipped this slot: ${lastError || "no candidate cleared the publishing bar"}`;
+        const reason = `Generation safety gate skipped this slot: ${lastError || "no candidate cleared the publishing bar"}`;
         await skipSlot(userId, slotIndex, reason);
         await Promise.all([
           prisma.generationJob.update({

@@ -92,6 +92,8 @@ Start generation, wait for the job to finish, and then open the created post fro
 
 Do not keep regenerating only to fill every empty window. DevPulse is designed to skip weak ideas.
 
+DevPulse also blocks sources and repository facts that already produced a post. It compares the complete X and LinkedIn drafts with recent content, so changing only a few words does not count as a new post. If the logs say the duplicate guard exhausted the candidate pool, sync the repositories, approve new evidence-backed facts, or wait for genuinely fresh research instead of regenerating the same idea.
+
 ---
 
 ## Intelligence

@@ -10,8 +10,9 @@ Phase 3 turns each selected source into distinct, platform-native drafts for X a
 4. Ask the writer for two candidate packs from the same source facts.
 5. Normalize each candidate, enforce X's 280-character limit, and attach the source URL to X.
 6. Audit both platform formats and select the stronger candidate.
-7. Reject hard failures, low engagement scores, exact duplicates, and hooks that are too similar to recent posts.
-8. Store the winning LinkedIn post, X post/thread, citations, and blended quality scores for manual review.
+7. Remove any source or repository fact that has already produced a post before calling the writer.
+8. Reject hard failures, low engagement scores, exact duplicates, near-identical complete drafts, and hooks that are too similar to recent posts.
+9. Store the winning LinkedIn post, X post/thread, stable idea fingerprint, citations, and blended quality scores for manual review.
 
 ## Platform playbooks
 
@@ -55,6 +56,10 @@ Hard failures include missing X copy, over-limit X posts, unusable openings, pla
 - Owned-project drafts reject unsupported numbers, code identifiers, collective `we/our/us` voice, and historical claims such as `early on` unless supplied by the source.
 - New hooks are compared with up to 100 recent openings. Near-duplicates are rejected even when the full content hash differs.
 - Both DeepSeek candidates are checked for hook similarity before one is selected, so a repeated winner does not discard a usable alternate from the same response.
+- Every source and approved repository fact receives a stable idea fingerprint. Once that evidence has produced a post, wording changes cannot make it eligible again.
+- Complete LinkedIn and X drafts are compared with recent posts using meaningful-word overlap, ordered word pairs, and character shingles. Changing a few words remains a duplicate.
+- Regeneration keeps the original post in duplicate history until its replacement is safely stored, so it must select genuinely different evidence.
+- Duplicate checks are deterministic and in-memory. They add no DeepSeek request or network round trip to the Vercel generation path.
 
 ## Configuration
 

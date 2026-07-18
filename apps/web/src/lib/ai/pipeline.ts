@@ -54,6 +54,12 @@ import {
   type DualDraft,
   type EngagementBrief,
 } from "@/lib/content/engagement";
+import {
+  findNearDuplicateDraft,
+  ideaFingerprintForSource,
+  prepareHistoricalDrafts,
+  usedIdeaPostMap,
+} from "@/lib/content/deduplication";
 import { sourceItemKey, upsertResearchSources } from "@/lib/research/source-store";
 import {
   buildGenerationSnapshot,
@@ -694,21 +700,25 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
         },
       }),
       prisma.post.findMany({
-        where: {
-          userId: options.userId,
-          ...(regeneratePostIds.length > 0 ? { id: { notIn: regeneratePostIds } } : {}),
-        },
+        where: { userId: options.userId },
         select: {
+          id: true,
+          title: true,
           contentHash: true,
+          ideaFingerprint: true,
           hook: true,
           content: true,
+          contentLinkedIn: true,
+          threadJson: true,
           contentType: true,
           createdAt: true,
           sources: {
-            select: { source: { select: { externalId: true, title: true } } },
+            select: {
+              source: { select: { provider: true, externalId: true, title: true } },
+            },
           },
         },
-        take: 100,
+        take: 500,
         orderBy: { createdAt: "desc" },
       }),
     ]);
@@ -814,6 +824,27 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       }),
     ]);
 
+    const duplicateHistory = prepareHistoricalDrafts(
+      recentPosts.map((post) => ({
+        ...post,
+        sources: post.sources.map(({ source }) => source),
+      })),
+    );
+    const usedIdeas = usedIdeaPostMap(duplicateHistory);
+    const candidatesBeforeIdeaGuard = ordered.length;
+    ordered = ordered.filter(({ item }) =>
+      !usedIdeas.has(ideaFingerprintForSource(item)),
+    );
+    const blockedIdeas = candidatesBeforeIdeaGuard - ordered.length;
+    if (blockedIdeas > 0) {
+      log(
+        logs,
+        `Duplicate guard: removed ${blockedIdeas} source/fact candidate(s) that already produced a post`,
+        options.onLog,
+      );
+    }
+    const duplicatePoolExhausted = ordered.length === 0;
+
     const existingHashes = new Set(recentPosts.map((post) => post.contentHash));
     const recentHooks = recentPosts
       .map((post) => post.hook || post.content.split("\n")[0] || "")
@@ -853,7 +884,9 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     }
 
     let produced = 0;
-    let lastError = "";
+    let lastError = duplicatePoolExhausted
+      ? "Duplicate guard exhausted the candidate pool — fresh repository evidence or a new source is required"
+      : "";
 
     // Fast mode: fewer source attempts so we finish inside 60s.
     const maxAttempts = researchMode === "fast" ? Math.min(4, ordered.length) : Math.min(10, ordered.length);
@@ -861,6 +894,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const picked = ordered[attempt]!;
       const source = picked.item;
+      const ideaFingerprint = ideaFingerprintForSource(source);
       if (!executionDirective) {
         const cooldown = generationCooldownReason({
           sourceProjectKey: projectKeyFromSource(source.externalId, source.title),
@@ -939,6 +973,17 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
       if (audit.hardFailures.length && useAi) {
         lastError = audit.hardFailures.join("; ");
         log(logs, `Rejected draft: ${lastError} — trying next source…`, options.onLog);
+        continue;
+      }
+
+      const duplicate = findNearDuplicateDraft(
+        draft,
+        ideaFingerprint,
+        duplicateHistory,
+      );
+      if (duplicate) {
+        lastError = `Duplicate guard: ${duplicate.reason} (post ${duplicate.postId}, ${Math.round(duplicate.similarity * 100)}% similar)`;
+        log(logs, `${lastError} — trying next source…`, options.onLog);
         continue;
       }
 
@@ -1053,6 +1098,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           threadJson: JSON.stringify(draft.xThread),
           status: "pending_review",
           contentHash: hash,
+          ideaFingerprint,
           topicId: topicMatch?.id,
           writingStyleId: style?.id,
           researchRunId: researchRun.id,
@@ -1135,7 +1181,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
 
     if (produced === 0) {
       if (settings.adaptiveCadenceEnabled && !options.regenerate) {
-        const reason = `Adaptive quality gate skipped this slot: ${lastError || "no candidate cleared the publishing bar"}`;
+        const reason = `Generation safety gate skipped this slot: ${lastError || "no candidate cleared the publishing bar"}`;
         await skipSlot(options.userId, slotIndex, reason);
         await prisma.generationJob.update({
           where: { id: job.id },

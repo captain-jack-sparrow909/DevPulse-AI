@@ -302,6 +302,7 @@ model Post {
   threadJson                   String? // JSON string[] — X thread, each item ≤280 chars
   status                       String                      @default("draft") // draft | pending_review | approved | scheduled | ready | posted_manually | skipped | rejected | failed
   contentHash                  String
+  ideaFingerprint             String? // stable source/fact identity used to block semantic rewrites
   topicId                      String?
   topic                        Topic?                      @relation(fields: [topicId], references: [id], onDelete: SetNull)
   writingStyleId               String?
@@ -356,6 +357,7 @@ model Post {
   @@index([userId, createdAt])
   @@index([userId, status, createdAt])
   @@index([contentHash])
+  @@index([userId, ideaFingerprint])
   @@index([platform])
   @@index([experimentVariantId])
 }
