@@ -1,9 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createRequire } from "node:module";
 
-const require = createRequire(import.meta.url);
 const FONT_FAMILY = "Geist";
 
 let setupPromise: Promise<void> | null = null;
@@ -17,11 +15,17 @@ function xml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-function bundledFontPath(): string {
-  // Resolve the package directory, not the .ttf as a module. Turbopack does
-  // not need (or know how) to compile font files used directly by fontconfig.
+export function bundledVisualFontPath(
+  root = process.env.LAMBDA_TASK_ROOT?.trim() || process.cwd(),
+): string {
+  // Do not use require.resolve here. Turbopack replaces package resolution
+  // with a numeric module ID in the Vercel function bundle, which cannot be
+  // passed to path.dirname(). outputFileTracingIncludes keeps this exact file
+  // beside the deployed function under node_modules.
   return join(
-    dirname(require.resolve("next/package.json")),
+    root,
+    "node_modules",
+    "next",
     "dist",
     "compiled",
     "@vercel",
@@ -40,7 +44,11 @@ export async function ensureVisualFonts(): Promise<void> {
   if (setupPromise) return setupPromise;
 
   setupPromise = (async () => {
-    const fontDirectory = dirname(bundledFontPath());
+    const fontPath = bundledVisualFontPath();
+    await access(fontPath).catch(() => {
+      throw new Error(`Bundled visual font is missing at ${fontPath}`);
+    });
+    const fontDirectory = dirname(fontPath);
     const runtimeDirectory = join(tmpdir(), "devpulse-visual-fonts");
     const cacheDirectory = join(runtimeDirectory, "cache");
     const configPath = join(runtimeDirectory, "fonts.conf");

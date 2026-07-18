@@ -8,7 +8,7 @@ import {
   wrapVisualText,
 } from "@/lib/visuals/svg";
 import type { BrandConfig } from "@/lib/visuals/types";
-import { VISUAL_FONT_FAMILY } from "@/lib/visuals/fonts";
+import { bundledVisualFontPath, VISUAL_FONT_FAMILY } from "@/lib/visuals/fonts";
 
 const brand: BrandConfig = {
   displayName: "Jabir Khan",
@@ -66,6 +66,15 @@ test("SVG renderer uses the bundled production font instead of host fallbacks", 
   const svg = renderVisualSvg({ brief, brand });
   assert.match(svg, new RegExp(`font-family="${VISUAL_FONT_FAMILY}"`));
   assert.doesNotMatch(svg, /font-family="(?:Inter|Arial|ui-monospace)/);
+});
+
+test("serverless font path stays a filesystem string after bundling", () => {
+  const fontPath = bundledVisualFontPath("/var/task");
+  assert.equal(typeof fontPath, "string");
+  assert.equal(
+    fontPath,
+    "/var/task/node_modules/next/dist/compiled/@vercel/og/Geist-Regular.ttf",
+  );
 });
 
 test("long PNG titles reserve space before supporting context", () => {
