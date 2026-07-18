@@ -151,7 +151,10 @@ export function generationCooldownReason(input: {
     AdaptiveCadenceSettings,
     "adaptiveCadenceEnabled" | "projectCooldownHours" | "contentTypeCooldownHours"
   >;
+  /** Explicit user-triggered replacement runs may ignore cadence cooldowns. */
+  bypassCooldown?: boolean;
 }): string | null {
+  if (input.bypassCooldown) return null;
   if (!input.settings.adaptiveCadenceEnabled) return null;
   for (const post of input.recentPosts) {
     const hoursAgo = (input.now.getTime() - post.createdAt.getTime()) / 3_600_000;

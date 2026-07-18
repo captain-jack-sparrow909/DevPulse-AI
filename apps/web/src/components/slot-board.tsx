@@ -67,7 +67,7 @@ export function SlotBoard({
   async function regenerateSlot(slotIndex: number) {
     if (
       !confirm(
-        `Regenerate slot ${slotIndex + 1}?\n\nThe current post for this slot will be deleted and replaced with a fresh research + write run.`,
+        `Regenerate slot ${slotIndex + 1}?\n\nThe current post will be deleted and replaced with a fresh research + write run. Manual regeneration ignores the 36-hour project cooldown.`,
       )
     ) {
       return;

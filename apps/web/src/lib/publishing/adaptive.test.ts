@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildAdaptivePublishingPlan,
   effectivePostsPerDay,
+  generationCooldownReason,
   generationQualityGate,
   linkedInPublishingDays,
   type AdaptiveCadenceSettings,
@@ -57,6 +58,25 @@ test("adaptive generation refuses drafts below either quality floor", () => {
     ),
     [],
   );
+});
+
+test("only an explicit manual replacement bypasses generation cooldowns", () => {
+  const input = {
+    sourceProjectKey: "intellitab",
+    contentType: "architecture_breakdown",
+    recentPosts: [
+      {
+        createdAt: new Date("2026-07-13T07:00:00Z"),
+        contentType: "project_lesson",
+        projectKeys: ["intellitab"],
+      },
+    ],
+    now: new Date("2026-07-13T08:00:00Z"),
+    settings,
+  };
+
+  assert.match(generationCooldownReason(input) || "", /36h cooldown/);
+  assert.equal(generationCooldownReason({ ...input, bypassCooldown: true }), null);
 });
 
 test("four LinkedIn posts are intentionally spread across the week", () => {

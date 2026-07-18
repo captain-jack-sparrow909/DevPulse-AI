@@ -88,7 +88,8 @@ export interface PipelineOptions {
   allowEarly?: boolean;
   /**
    * Clear any existing post for the target slot today, then generate a fresh one.
-   * Requires slotIndex (explicit target).
+   * Requires slotIndex (explicit target). Because this is an explicit manual
+   * replacement, project and content-type cadence cooldowns are bypassed.
    */
   regenerate?: boolean;
   platforms?: Array<"x" | "linkedin">;
@@ -379,6 +380,11 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     log(
       logs,
       `Regenerate: cleared ${cleared.deleted} post(s) for slot ${options.slotIndex + 1}`,
+      options.onLog,
+    );
+    log(
+      logs,
+      "Manual regenerate: bypassing project and content-type cadence cooldowns",
       options.onLog,
     );
   }
@@ -838,6 +844,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
           })),
           now,
           settings,
+          bypassCooldown: options.regenerate === true,
         });
         if (cooldown) {
           lastError = `Cooldown: ${cooldown}`;
