@@ -24,8 +24,8 @@ test("default strategy contains all three owned projects", () => {
 
 test("owned projects are split into focused, reusable fact cards", () => {
   const sources = projectSources(DEFAULT_CONTENT_STRATEGY);
-  assert.equal(sources.length, 7);
-  assert.equal(new Set(sources.map((source) => source.externalId)).size, 7);
+  assert.equal(sources.length, 15);
+  assert.equal(new Set(sources.map((source) => source.externalId)).size, 15);
   assert.ok(
     sources.some(
       (source) =>
@@ -38,6 +38,13 @@ test("owned projects are split into focused, reusable fact cards", () => {
       (source) =>
         source.externalId === "owned:intellitab:local-model-target" &&
         source.summary?.includes("target, not a guaranteed measured result"),
+    ),
+  );
+  assert.ok(
+    sources.some(
+      (source) =>
+        source.externalId === "owned:rontgen-ai:relay-build-pipeline" &&
+        source.summary?.includes("Automatic GitHub and GitLab CI evidence ingestion remains future integration work"),
     ),
   );
 });

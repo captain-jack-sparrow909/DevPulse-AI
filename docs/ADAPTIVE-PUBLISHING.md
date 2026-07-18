@@ -4,14 +4,14 @@ Phase 15 changes DevPulse from a calendar-filling generator into a selective pub
 
 ## Defaults
 
-- X: two draft windows per day.
+- Five daily X + LinkedIn draft windows: 06:30, 12:30, 16:30, 19:30, and 21:30 in the configured timezone.
 - LinkedIn: four publishing days per week.
 - Minimum overall quality: 8.0/10.
 - Minimum novelty: 7.0/10.
-- Owned-project cooldown: 36 hours.
-- Content-type cooldown: 24 hours.
+- Owned-project cooldown: disabled (`0` hours).
+- Content-type cooldown: disabled (`0` hours).
 
-All values are editable in Settings. Turning adaptive cadence off restores the legacy `postsPerDay` schedule.
+All values are editable in Settings. Quality, novelty, grounding, and duplicate-hook checks remain active even when cooldowns are disabled. Turning adaptive cadence off restores the legacy `postsPerDay` schedule only when no explicit daily times are configured.
 
 ## Generation gates
 

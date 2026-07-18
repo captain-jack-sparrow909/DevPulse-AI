@@ -7,6 +7,9 @@
     "src/app/api/cron/slot/route.ts": {
       "maxDuration": 60
     },
+    "src/app/api/cron/projects/route.ts": {
+      "maxDuration": 60
+    },
     "src/app/api/generate/route.ts": {
       "maxDuration": 60
     },

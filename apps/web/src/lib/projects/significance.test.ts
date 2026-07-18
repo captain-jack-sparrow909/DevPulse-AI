@@ -36,3 +36,21 @@ test("project fact uses evidence without inventing an outcome", () => {
   assert.match(fact.claim, /src\/lib\/projects\/sync\.ts/);
   assert.doesNotMatch(fact.claim, /saved|improved|increased|reduced/i);
 });
+
+test("documentation facts preserve the exact reviewed claim and evidence", () => {
+  const fact = buildProjectFact({
+    ...base,
+    kind: "documentation",
+    externalId: "README.md:blob:table-5-relay",
+    title: "README.md: Build pipeline optimizer",
+    documentedFact: {
+      title: "Build pipeline optimizer — Relay",
+      claim: "Build pipeline optimizer is documented under Relay. Status: Included.",
+      confidence: 0.92,
+      evidence: { path: "README.md", blobSha: "blob", lineStart: 5, lineEnd: 5 },
+    },
+  });
+  assert.equal(fact.title, "Build pipeline optimizer — Relay");
+  assert.equal(fact.confidence, 0.92);
+  assert.equal("path" in fact.evidence ? fact.evidence.path : null, "README.md");
+});

@@ -20,6 +20,8 @@ import {
 } from "./scoring";
 import {
   buildSlotPlan,
+  contentRotationIndex,
+  dailyPostTimesFromSettings,
   dayBoundsUtc,
   formatSlotDateTime,
   listStaleMissedDueSlots,
@@ -38,7 +40,11 @@ import {
   orderCandidatesForStrategy,
   strategyFromRecord,
 } from "@/lib/content/strategy";
-import { markProjectFactUsed, projectSourcesForUser } from "@/lib/projects/fact-sources";
+import {
+  markProjectFactUsed,
+  projectSourcesForUser,
+  staleProjectKnowledgeWarnings,
+} from "@/lib/projects/fact-sources";
 import {
   buildEngagementPrompt,
   engagementBriefForSlot,
@@ -326,6 +332,7 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     settings.firstPostHour,
     settings.lastPostHour,
     effectivePostsPerDay(settings),
+    dailyPostTimesFromSettings(settings),
   );
 
   // Avoid overlapping cron workers for the same user (double posts / pool thrash)
@@ -616,15 +623,28 @@ export async function runDueSlotGeneration(options: PipelineOptions): Promise<Pi
     const researchMode = options.researchMode ?? "fast";
     const skipScreenshot =
       options.skipScreenshot ?? researchMode === "fast";
-    const contentType = executionContentItem(executionDirective, strategy, slotIndex);
+    const rotationIndex = contentRotationIndex(
+      scheduledFor,
+      settings.timezone,
+      slotIndex,
+      plan.postsPerDay,
+    );
+    const contentType = executionContentItem(executionDirective, strategy, rotationIndex);
     log(
       logs,
       `Collecting sources (${researchMode} mode) · ${describeSourcePolicy(contentType.type)}`,
       options.onLog,
     );
 
+    const [ownedProjectSources, freshnessWarnings] = await Promise.all([
+      projectSourcesForUser(options.userId, strategy),
+      staleProjectKnowledgeWarnings(options.userId),
+    ]);
+    for (const warning of freshnessWarnings) {
+      log(logs, `Project knowledge warning: ${warning}`, options.onLog);
+    }
     const rawSources = [
-      ...(await projectSourcesForUser(options.userId, strategy)),
+      ...ownedProjectSources,
       ...(await collectAllSources({
         mode: researchMode,
         contentType: contentType.type,

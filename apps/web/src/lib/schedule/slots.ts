@@ -9,9 +9,66 @@ import {
 } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 
+export const DEFAULT_DAILY_POST_TIMES = [
+  "06:30",
+  "12:30",
+  "16:30",
+  "19:30",
+  "21:30",
+] as const;
+
+const DAILY_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/** Validate, deduplicate, and sort local wall-clock post times. */
+export function normalizeDailyPostTimes(
+  times: readonly string[] | null | undefined,
+): string[] {
+  if (!times) return [];
+  return [...new Set(
+    times
+      .map((time) => time.trim())
+      .filter((time) => DAILY_TIME_PATTERN.test(time)),
+  )].sort((a, b) => a.localeCompare(b));
+}
+
+export function parseDailyPostTimesJson(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? normalizeDailyPostTimes(parsed.filter((value): value is string => typeof value === "string"))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function dailyPostTimesFromSettings(settings: {
+  dailyPostTimesJson?: string | null;
+}): string[] {
+  return parseDailyPostTimesJson(settings.dailyPostTimesJson);
+}
+
 /**
- * 12 slots between firstHour (default 6) and lastHour (default 21) in the user's timezone.
- * Evenly spaced so first is 06:00 and last is 21:00 (UAE default: Asia/Dubai).
+ * Continue the editorial mix across local calendar days instead of restarting
+ * the weighted rotation at slot zero every morning.
+ */
+export function contentRotationIndex(
+  date: Date,
+  timezone: string,
+  slotIndex: number,
+  slotsPerDay: number,
+): number {
+  const zoned = toZonedTime(date, timezone);
+  const localDayNumber = Math.floor(
+    Date.UTC(zoned.getFullYear(), zoned.getMonth(), zoned.getDate()) / 86_400_000,
+  );
+  return localDayNumber * Math.max(1, slotsPerDay) + slotIndex;
+}
+
+/**
+ * Explicit local wall-clock times when configured; otherwise evenly spaced
+ * slots between firstHour and lastHour in the user's timezone.
  */
 export function computeDailySlots(
   date: Date,
@@ -19,8 +76,22 @@ export function computeDailySlots(
   firstHour = 6,
   lastHour = 21,
   count = 12,
+  dailyPostTimes: readonly string[] = [],
 ): Date[] {
   const zoned = toZonedTime(date, timezone);
+  const explicitTimes = normalizeDailyPostTimes(dailyPostTimes);
+
+  if (explicitTimes.length > 0) {
+    return explicitTimes.map((time) => {
+      const [hour, minute] = time.split(":").map(Number);
+      const local = setMilliseconds(
+        setSeconds(setMinutes(setHours(zoned, hour!), minute!), 0),
+        0,
+      );
+      return fromZonedTime(local, timezone);
+    });
+  }
+
   const dayStart = setMilliseconds(setSeconds(setMinutes(setHours(zoned, firstHour), 0), 0), 0);
   const totalMinutes = (lastHour - firstHour) * 60;
   const step = count <= 1 ? 0 : totalMinutes / (count - 1);
@@ -84,8 +155,16 @@ export function buildSlotPlan(
   firstHour = 6,
   lastHour = 21,
   postsPerDay = 12,
+  dailyPostTimes: readonly string[] = [],
 ): SlotPlan {
-  const slots = computeDailySlots(now, timezone, firstHour, lastHour, postsPerDay);
+  const slots = computeDailySlots(
+    now,
+    timezone,
+    firstHour,
+    lastHour,
+    postsPerDay,
+    dailyPostTimes,
+  );
   const dueSlotIndexes: number[] = [];
   let nextUpcomingIndex: number | null = null;
   let nextUpcomingAt: Date | null = null;
@@ -103,7 +182,7 @@ export function buildSlotPlan(
   return {
     slots,
     timezone,
-    postsPerDay,
+    postsPerDay: slots.length,
     firstHour,
     lastHour,
     dueSlotIndexes,

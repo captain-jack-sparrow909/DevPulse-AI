@@ -40,6 +40,7 @@ export async function POST(request: Request) {
         repositories: results.length,
         failures: failures.length,
         changesFound: results.reduce((sum, result) => sum + result.changesFound, 0),
+        documentationFacts: results.reduce((sum, result) => sum + result.documentationFacts, 0),
       },
     });
     if (failures.length === results.length && failures.length > 0) {
@@ -63,10 +64,11 @@ export async function POST(request: Request) {
       (total, result) => ({
         changesFound: total.changesFound + result.changesFound,
         factsCreated: total.factsCreated + result.factsCreated,
+        documentationFacts: total.documentationFacts + result.documentationFacts,
         ignoredChanges: total.ignoredChanges + result.ignoredChanges,
         failures: total.failures + (result.error ? 1 : 0),
       }),
-      { changesFound: 0, factsCreated: 0, ignoredChanges: 0, failures: 0 },
+      { changesFound: 0, factsCreated: 0, documentationFacts: 0, ignoredChanges: 0, failures: 0 },
     ),
   });
 }

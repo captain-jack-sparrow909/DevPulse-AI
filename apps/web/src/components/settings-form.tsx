@@ -21,6 +21,7 @@ type Settings = {
   minimumNovelty: number;
   projectCooldownHours: number;
   contentTypeCooldownHours: number;
+  dailyPostTimes: string[];
 };
 
 type Topic = { id: string; name: string; keywords: string; active: boolean };
@@ -127,21 +128,18 @@ export function SettingsForm({
               className="h-4 w-4 accent-teal-400"
             />
             <span>
-              <span className="block text-sm font-medium text-teal-100">Adaptive cadence</span>
+              <span className="block text-sm font-medium text-teal-100">Adaptive quality gates</span>
               <span className="block text-xs text-zinc-500">
-                Generate fewer high-confidence drafts and let each platform publish independently.
+                Keep quality-aware selection and let each platform publish independently.
               </span>
             </span>
           </label>
-          <div>
-            <label className="mb-1 block text-xs text-zinc-400">X posts per day</label>
-            <Input
-              type="number"
-              min={1}
-              max={4}
-              value={settings.xPostsPerDay}
-              onChange={(e) => setSettings({ ...settings, xPostsPerDay: Number(e.target.value) })}
-            />
+          <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/[0.05] p-3">
+            <div className="text-xs text-zinc-400">Daily draft slots</div>
+            <div className="mt-1 text-2xl font-semibold text-cyan-100">
+              {settings.dailyPostTimes.length}
+            </div>
+            <div className="mt-1 text-xs text-zinc-500">Each slot creates an X + LinkedIn draft pack.</div>
           </div>
           <div>
             <label className="mb-1 block text-xs text-zinc-400">LinkedIn posts per week</label>
@@ -155,21 +153,35 @@ export function SettingsForm({
               }
             />
           </div>
-          <div>
-            <label className="mb-1 block text-xs text-zinc-400">First post hour</label>
-            <Input
-              type="number"
-              value={settings.firstPostHour}
-              onChange={(e) => setSettings({ ...settings, firstPostHour: Number(e.target.value) })}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-zinc-400">Last post hour</label>
-            <Input
-              type="number"
-              value={settings.lastPostHour}
-              onChange={(e) => setSettings({ ...settings, lastPostHour: Number(e.target.value) })}
-            />
+          <div className="space-y-3 sm:col-span-2">
+            <div>
+              <div className="text-sm font-medium text-zinc-200">Daily generation times</div>
+              <div className="text-xs text-zinc-500">
+                Local wall-clock times in {settings.timezone}. Cron begins preparing each draft shortly before its slot.
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-5">
+              {settings.dailyPostTimes.map((time, index) => (
+                <div key={index} className="space-y-1">
+                  <label className="block text-xs text-zinc-500">Slot {index + 1}</label>
+                  <Input
+                    type="time"
+                    value={time}
+                    onChange={(event) => {
+                      const dailyPostTimes = settings.dailyPostTimes.map((item, itemIndex) =>
+                        itemIndex === index ? event.target.value : item,
+                      );
+                      setSettings({
+                        ...settings,
+                        dailyPostTimes,
+                        postsPerDay: dailyPostTimes.length,
+                        xPostsPerDay: dailyPostTimes.length,
+                      });
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
           <div>
             <label className="mb-1 block text-xs text-zinc-400">Minimum novelty (0–10)</label>
@@ -195,6 +207,7 @@ export function SettingsForm({
                 setSettings({ ...settings, projectCooldownHours: Number(e.target.value) })
               }
             />
+            <p className="mt-1 text-xs text-zinc-600">Set to 0 to disable.</p>
           </div>
           <div>
             <label className="mb-1 block text-xs text-zinc-400">Content-type cooldown (hours)</label>
@@ -207,6 +220,7 @@ export function SettingsForm({
                 setSettings({ ...settings, contentTypeCooldownHours: Number(e.target.value) })
               }
             />
+            <p className="mt-1 text-xs text-zinc-600">Set to 0 to disable.</p>
           </div>
           {!settings.adaptiveCadenceEnabled && (
             <div>

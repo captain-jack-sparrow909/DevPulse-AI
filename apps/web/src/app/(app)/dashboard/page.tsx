@@ -9,11 +9,12 @@ import { PageHeader } from "@/components/page-header";
 import { isAiConfigured } from "@/lib/ai/client";
 import { formatDistanceToNow } from "date-fns";
 import { ArrowRight, Clock3, FileText, Sparkles, Zap } from "lucide-react";
+import { parseDailyPostTimesJson } from "@/lib/schedule/slots";
 
 export default async function DashboardPage() {
   const session = await requireUser();
   const userId = session.user.id;
-  const [statusGroups, recent, lastJob, sourceCount] = await Promise.all([
+  const [statusGroups, recent, lastJob, sourceCount, settings] = await Promise.all([
     prisma.post.groupBy({ by: ["status"], where: { userId }, _count: { _all: true } }),
     prisma.post.findMany({
       where: { userId },
@@ -26,7 +27,13 @@ export default async function DashboardPage() {
       orderBy: { createdAt: "desc" },
     }),
     prisma.source.count(),
+    prisma.userSettings.upsert({
+      where: { userId },
+      create: { userId },
+      update: {},
+    }),
   ]);
+  const dailyPostTimes = parseDailyPostTimesJson(settings.dailyPostTimesJson);
   const counts = new Map(statusGroups.map((group) => [group.status, group._count._all]));
   const total = statusGroups.reduce((sum, group) => sum + group._count._all, 0);
   const pending = counts.get("pending_review") ?? 0;
@@ -179,7 +186,9 @@ export default async function DashboardPage() {
           <Card className="overflow-hidden">
             <div className="border-b border-white/[0.05] bg-gradient-to-br from-teal-500/[0.08] to-transparent px-5 py-4">
               <CardTitle>Daily cadence</CardTitle>
-              <CardDescription className="mt-1">12 slots · 06:00–21:00 · Asia/Dubai</CardDescription>
+              <CardDescription className="mt-1">
+                {dailyPostTimes.length || settings.xPostsPerDay} slots · {dailyPostTimes.join(" · ") || `${settings.firstPostHour}:00–${settings.lastPostHour}:00`} · {settings.timezone}
+              </CardDescription>
             </div>
             <CardContent className="text-sm leading-relaxed text-zinc-400">
               Cron generates <span className="text-zinc-200">one post for the current due slot</span>{" "}

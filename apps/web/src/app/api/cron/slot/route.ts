@@ -10,6 +10,8 @@ import {
   startOperationalRun,
 } from "@/lib/operations/store";
 import { markStaleOperationalWork } from "@/lib/operations/recovery";
+import { syncNextStaleOwnedRepository } from "@/lib/projects/github-sync";
+import { ensureOwnedRepositories } from "@/lib/projects/repositories";
 
 /** Hobby max 60s — we pack several phases into this window (no self-fetch). */
 export const maxDuration = 60;
@@ -54,6 +56,13 @@ async function runCronWork(): Promise<{
     continueChain?: boolean;
   }>;
   cleanup?: Record<string, number>;
+  repositorySync?: {
+    fullName: string;
+    factsCreated: number;
+    documentationFacts: number;
+    unchanged: boolean;
+    error?: string;
+  };
   error?: string;
 }> {
   try {
@@ -68,33 +77,60 @@ async function runCronWork(): Promise<{
     );
 
     let cleanup: Awaited<ReturnType<typeof runRetentionCleanup>> | undefined;
+    let repositorySync: Awaited<ReturnType<typeof syncNextStaleOwnedRepository>> | undefined;
     // Cleanup only when fully idle (no post and nothing left mid-job)
     if (result.created === 0 && !result.continueChain) {
-      const cleanupRun = await startOperationalRun({
-        kind: "retention_cleanup",
+      await Promise.all(result.results.map((userResult) => ensureOwnedRepositories(userResult.userId)));
+      const repositoryRun = await startOperationalRun({
+        kind: "project_sync",
         source: "cron",
-        stage: "cleanup",
+        stage: "freshness_check",
       });
-      try {
-        cleanup = await runRetentionCleanup();
-        await completeOperationalRun(cleanupRun.id, {
-          stage: "completed",
-          message: "Retention cleanup completed.",
+      repositorySync = await syncNextStaleOwnedRepository();
+      if (repositorySync) {
+        await completeOperationalRun(repositoryRun.id, {
+          stage: repositorySync.error ? "partial_failure" : "completed",
+          message: repositorySync.error
+            ? `Repository freshness sync failed for ${repositorySync.fullName}.`
+            : `Repository freshness sync completed for ${repositorySync.fullName}.`,
           metadata: {
-            postsDeleted: cleanup.postsDeleted,
-            visualAssetsDeleted: cleanup.visualAssetsDeleted,
-            operationalRunsDeleted: cleanup.operationalRunsDeleted,
+            repositoryId: repositorySync.repositoryId,
+            factsCreated: repositorySync.factsCreated,
+            documentationFacts: repositorySync.documentationFacts,
+            unchanged: repositorySync.unchanged,
           },
         });
-      } catch (error) {
-        await failOperationalRun(cleanupRun.id, error, "retention_cleanup");
-        throw error;
-      }
-      for (const userResult of result.results) {
+      } else {
+        await completeOperationalRun(repositoryRun.id, {
+          stage: "completed",
+          message: "All active repositories were already fresh.",
+        });
+        const cleanupRun = await startOperationalRun({
+          kind: "retention_cleanup",
+          source: "cron",
+          stage: "cleanup",
+        });
         try {
-          await refreshServiceHealthIfStale(userResult.userId);
+          cleanup = await runRetentionCleanup();
+          await completeOperationalRun(cleanupRun.id, {
+            stage: "completed",
+            message: "Retention cleanup completed.",
+            metadata: {
+              postsDeleted: cleanup.postsDeleted,
+              visualAssetsDeleted: cleanup.visualAssetsDeleted,
+              operationalRunsDeleted: cleanup.operationalRunsDeleted,
+            },
+          });
         } catch (error) {
-          console.error("[cron/health]", error instanceof Error ? error.message : error);
+          await failOperationalRun(cleanupRun.id, error, "retention_cleanup");
+          throw error;
+        }
+        for (const userResult of result.results) {
+          try {
+            await refreshServiceHealthIfStale(userResult.userId);
+          } catch (error) {
+            console.error("[cron/health]", error instanceof Error ? error.message : error);
+          }
         }
       }
     }
@@ -121,6 +157,15 @@ async function runCronWork(): Promise<{
             attributionWindowsDeleted: cleanup.attributionWindowsDeleted,
             operationalRunsDeleted: cleanup.operationalRunsDeleted,
             healthSnapshotsDeleted: cleanup.healthSnapshotsDeleted,
+          }
+        : undefined,
+      repositorySync: repositorySync
+        ? {
+            fullName: repositorySync.fullName,
+            factsCreated: repositorySync.factsCreated,
+            documentationFacts: repositorySync.documentationFacts,
+            unchanged: repositorySync.unchanged,
+            error: repositorySync.error,
           }
         : undefined,
     };

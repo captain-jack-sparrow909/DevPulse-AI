@@ -1,6 +1,6 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { prisma } from "@/lib/db";
-import { dayBoundsUtc } from "@/lib/schedule/slots";
+import { dailyPostTimesFromSettings, dayBoundsUtc } from "@/lib/schedule/slots";
 import { getContentStrategy } from "@/lib/content/strategy-store";
 import { DEFAULT_CONTENT_STRATEGY, contentTypeForSlot, type ContentMixItem, type ContentStrategyConfig, type ContentType } from "@/lib/content/strategy";
 import { buildExecutionPlan } from "@/lib/execution-plan/engine";
@@ -47,6 +47,7 @@ export async function createWeeklyExecutionPlan(userId: string, reviewId?: strin
     firstPostHour: settings?.firstPostHour ?? 6,
     lastPostHour: settings?.lastPostHour ?? 21,
     postsPerDay: settings ? effectivePostsPerDay(settings) : 2,
+    dailyPostTimes: settings ? dailyPostTimesFromSettings(settings) : [],
     strategy,
     reviewId: review.id,
     reviewStatus: review.status,

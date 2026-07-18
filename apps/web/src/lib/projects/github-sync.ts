@@ -6,10 +6,33 @@ import {
   buildProjectFact,
   type RepositoryChangeCandidate,
 } from "@/lib/projects/significance";
+import {
+  extractDocumentationFacts,
+  isProductDocumentationPath,
+} from "@/lib/projects/documentation";
+import { REPOSITORY_SYNC_INTERVAL_MS } from "@/lib/projects/freshness";
 
 interface GitHubRepo {
   default_branch?: string;
   html_url?: string;
+}
+
+interface GitHubTree {
+  truncated?: boolean;
+  tree?: Array<{
+    path?: string;
+    type?: "blob" | "tree" | "commit";
+    sha?: string;
+    size?: number;
+  }>;
+}
+
+interface GitHubContent {
+  type?: string;
+  encoding?: string;
+  content?: string;
+  size?: number;
+  sha?: string;
 }
 
 interface GitHubCommitListItem {
@@ -89,11 +112,11 @@ function firstLine(value?: string | null) {
 }
 
 async function collectCommits(repository: OwnedRepository, since: Date) {
-  const path = `/repos/${repository.owner}/${repository.repo}/commits?per_page=12&since=${encodeURIComponent(since.toISOString())}`;
+  const path = `/repos/${repository.owner}/${repository.repo}/commits?sha=${encodeURIComponent(repository.defaultBranch)}&per_page=30&since=${encodeURIComponent(since.toISOString())}`;
   const items = await githubJson<GitHubCommitListItem[]>(path);
   const detailCandidates = items
     .filter((item) => !/^(merge |bump |chore(?:\(.+\))?:|deps?(?:\(.+\))?:)/i.test(item.commit.message.trim()))
-    .slice(0, 6);
+    .slice(0, 8);
   const details = await Promise.all(
     detailCandidates.map((item) =>
       githubJson<GitHubCommitDetail>(`/repos/${repository.owner}/${repository.repo}/commits/${item.sha}`),
@@ -119,6 +142,85 @@ async function collectCommits(repository: OwnedRepository, since: Date) {
       };
     }),
   };
+}
+
+function documentationRank(path: string) {
+  if (/^readme(?:\.[^/]+)?$/i.test(path)) return 100;
+  if (/^(?:docs?|documentation)\//i.test(path)) return 80;
+  if (/(?:product|feature|capabilit|roadmap|status|idea|architecture)/i.test(path)) return 60;
+  return 20;
+}
+
+async function collectDocumentation(
+  repository: OwnedRepository,
+  headSha: string,
+  occurredAt: Date,
+): Promise<RepositoryChangeCandidate[]> {
+  const tree = await githubJson<GitHubTree>(
+    `/repos/${repository.owner}/${repository.repo}/git/trees/${encodeURIComponent(headSha)}?recursive=1`,
+  );
+  if (tree.truncated) {
+    console.warn(`[project-sync] ${repository.fullName} tree was truncated; scanning returned entries only`);
+  }
+  const documents = (tree.tree ?? [])
+    .filter((entry) =>
+      entry.type === "blob" &&
+      typeof entry.path === "string" &&
+      typeof entry.sha === "string" &&
+      (entry.size ?? 0) <= 200_000 &&
+      isProductDocumentationPath(entry.path),
+    )
+    .sort((a, b) => documentationRank(b.path!) - documentationRank(a.path!))
+    .slice(0, 8);
+
+  const results: RepositoryChangeCandidate[] = [];
+  for (const document of documents) {
+    const path = document.path!;
+    const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+    const content = await githubJson<GitHubContent>(
+      `/repos/${repository.owner}/${repository.repo}/contents/${encodedPath}?ref=${encodeURIComponent(headSha)}`,
+    );
+    if (content.type !== "file" || content.encoding !== "base64" || !content.content) continue;
+    const decoded = Buffer.from(content.content.replace(/\s/g, ""), "base64").toString("utf8");
+    const facts = extractDocumentationFacts({ path, content: decoded });
+    for (const fact of facts) {
+      const lineAnchor = fact.lineEnd > fact.lineStart
+        ? `#L${fact.lineStart}-L${fact.lineEnd}`
+        : `#L${fact.lineStart}`;
+      const sourceUrl = `https://github.com/${repository.fullName}/blob/${headSha}/${path}${lineAnchor}`;
+      results.push({
+        externalId: `${path}:${document.sha}:${fact.key}`,
+        kind: "documentation",
+        title: `${path}: ${fact.title}`,
+        summary: fact.excerpt,
+        url: sourceUrl,
+        occurredAt,
+        changedFiles: [path],
+        raw: {
+          path,
+          blobSha: document.sha,
+          headSha,
+          lineStart: fact.lineStart,
+          lineEnd: fact.lineEnd,
+        },
+        documentedFact: {
+          title: fact.title,
+          claim: fact.claim,
+          confidence: 0.92,
+          evidence: {
+            path,
+            blobSha: document.sha,
+            headSha,
+            lineStart: fact.lineStart,
+            lineEnd: fact.lineEnd,
+            excerpt: fact.excerpt,
+          },
+        },
+      });
+      if (results.length >= 24) return results;
+    }
+  }
+  return results;
 }
 
 async function collectPulls(repository: OwnedRepository, since: Date) {
@@ -231,6 +333,8 @@ export interface RepositorySyncResult {
   meaningfulChanges: number;
   factsCreated: number;
   ignoredChanges: number;
+  documentationFacts: number;
+  unchanged: boolean;
   error?: string;
 }
 
@@ -242,26 +346,49 @@ export async function syncOwnedRepository(repository: OwnedRepository): Promise<
   try {
     const since = sinceDate(repository);
     const metadata = await githubJson<GitHubRepo>(`/repos/${repository.owner}/${repository.repo}`);
-    const [commitResult, pulls, releases] = await Promise.all([
-      collectCommits(repository, since),
-      collectPulls(repository, since),
-      collectReleases(repository, since),
+    const defaultBranch = metadata.default_branch || repository.defaultBranch;
+    const head = await githubJson<GitHubCommitDetail>(
+      `/repos/${repository.owner}/${repository.repo}/commits/${encodeURIComponent(defaultBranch)}`,
+    );
+    const repositoryAtHead = { ...repository, defaultBranch };
+    const existingDocumentation = await prisma.repositoryChange.count({
+      where: { repositoryId: repository.id, kind: "documentation" },
+    });
+    const changed = repository.lastCommitSha !== head.sha;
+    const shouldScanDocumentation = changed || existingDocumentation === 0;
+    const [commitResult, pulls, releases, documentation] = await Promise.all([
+      changed
+        ? collectCommits(repositoryAtHead, since)
+        : Promise.resolve({ lastCommitSha: head.sha, changes: [] }),
+      changed ? collectPulls(repositoryAtHead, since) : Promise.resolve([]),
+      changed ? collectReleases(repositoryAtHead, since) : Promise.resolve([]),
+      shouldScanDocumentation
+        ? collectDocumentation(
+            repositoryAtHead,
+            head.sha,
+            new Date(head.commit.author?.date || head.commit.committer?.date || Date.now()),
+          )
+        : Promise.resolve([]),
     ]);
-    const changes = [...releases, ...pulls, ...commitResult.changes].slice(0, 30);
+    const changes = [...documentation, ...releases, ...pulls, ...commitResult.changes].slice(0, 40);
     let meaningfulChanges = 0;
     let factsCreated = 0;
+    let documentationFacts = 0;
     for (const change of changes) {
       const persisted = await persistChange(repository, change);
       if (persisted.meaningful) meaningfulChanges += 1;
-      if (persisted.createdFact) factsCreated += 1;
+      if (persisted.createdFact) {
+        factsCreated += 1;
+        if (change.kind === "documentation") documentationFacts += 1;
+      }
     }
     await prisma.ownedRepository.update({
       where: { id: repository.id },
       data: {
         syncStatus: "completed",
         lastSyncedAt: new Date(),
-        lastCommitSha: commitResult.lastCommitSha ?? repository.lastCommitSha,
-        defaultBranch: metadata.default_branch || repository.defaultBranch,
+        lastCommitSha: head.sha || commitResult.lastCommitSha || repository.lastCommitSha,
+        defaultBranch,
         url: metadata.html_url || repository.url,
         lastError: null,
       },
@@ -273,6 +400,8 @@ export async function syncOwnedRepository(repository: OwnedRepository): Promise<
       meaningfulChanges,
       factsCreated,
       ignoredChanges: changes.length - meaningfulChanges,
+      documentationFacts,
+      unchanged: !changed && existingDocumentation > 0,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Repository sync failed";
@@ -287,9 +416,60 @@ export async function syncOwnedRepository(repository: OwnedRepository): Promise<
       meaningfulChanges: 0,
       factsCreated: 0,
       ignoredChanges: 0,
+      documentationFacts: 0,
+      unchanged: false,
       error: message,
     };
   }
+}
+
+export async function syncStaleOwnedRepositories(
+  maxAgeMs = REPOSITORY_SYNC_INTERVAL_MS,
+): Promise<RepositorySyncResult[]> {
+  const staleBefore = new Date(Date.now() - maxAgeMs);
+  const repositories = await prisma.ownedRepository.findMany({
+    where: {
+      active: true,
+      OR: [
+        { lastSyncedAt: null },
+        { lastSyncedAt: { lt: staleBefore } },
+      ],
+      NOT: {
+        AND: [
+          { syncStatus: "running" },
+          { updatedAt: { gte: new Date(Date.now() - 30 * 60 * 1_000) } },
+        ],
+      },
+    },
+    orderBy: [{ lastSyncedAt: "asc" }, { createdAt: "asc" }],
+  });
+  const results: RepositorySyncResult[] = [];
+  for (const repository of repositories) results.push(await syncOwnedRepository(repository));
+  return results;
+}
+
+/**
+ * Bounded fallback for the existing 15-minute external cron: process at most
+ * one stale repository on an otherwise idle generation tick.
+ */
+export async function syncNextStaleOwnedRepository(
+  maxAgeMs = REPOSITORY_SYNC_INTERVAL_MS,
+): Promise<RepositorySyncResult | null> {
+  const staleBefore = new Date(Date.now() - maxAgeMs);
+  const repository = await prisma.ownedRepository.findFirst({
+    where: {
+      active: true,
+      OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: staleBefore } }],
+      NOT: {
+        AND: [
+          { syncStatus: "running" },
+          { updatedAt: { gte: new Date(Date.now() - 30 * 60 * 1_000) } },
+        ],
+      },
+    },
+    orderBy: [{ lastSyncedAt: "asc" }, { createdAt: "asc" }],
+  });
+  return repository ? syncOwnedRepository(repository) : null;
 }
 
 export async function syncOwnedRepositories(userId: string, repositoryId?: string) {

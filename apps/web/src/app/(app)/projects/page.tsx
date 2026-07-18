@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { ProjectIntelligence } from "@/components/project-intelligence";
+import { repositoryIsStale } from "@/lib/projects/freshness";
 
 function parseFiles(value: string): string[] {
   try {
@@ -53,6 +54,7 @@ export default async function ProjectsPage() {
           active: repository.active,
           syncStatus: repository.syncStatus,
           lastSyncedAt: repository.lastSyncedAt?.toISOString() ?? null,
+          isStale: repositoryIsStale(repository.lastSyncedAt),
           lastError: repository.lastError,
           changeCount: repository._count.changes,
           factCount: repository._count.facts,

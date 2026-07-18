@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { effectivePostsPerDay } from "@/lib/publishing/adaptive";
+import { parseDailyPostTimesJson } from "@/lib/schedule/slots";
 
 export default async function SchedulePage() {
   const session = await requireUser();
@@ -23,7 +24,11 @@ export default async function SchedulePage() {
       take: 50,
     }),
   ]);
-  const dailySlots = effectivePostsPerDay(settings);
+  const dailyPostTimes = parseDailyPostTimesJson(settings.dailyPostTimesJson);
+  const dailySlots = dailyPostTimes.length || effectivePostsPerDay(settings);
+  const cadenceLabel = dailyPostTimes.length
+    ? dailyPostTimes.join(" · ")
+    : `${settings.firstPostHour}:00–${settings.lastPostHour}:00`;
 
   return (
     <div className="space-y-6">
@@ -31,7 +36,7 @@ export default async function SchedulePage() {
         <div className="page-kicker mb-2">Calendar</div>
         <h1 className="page-title">Schedule</h1>
         <p className="page-subtitle">
-          {dailySlots} adaptive draft slot{dailySlots === 1 ? "" : "s"} between {settings.firstPostHour}:00 and {settings.lastPostHour}:00. X and LinkedIn publishing recommendations are evaluated independently.
+          {dailySlots} daily draft slot{dailySlots === 1 ? "" : "s"} at {cadenceLabel} ({settings.timezone}). X and LinkedIn publishing recommendations are evaluated independently.
         </p>
       </div>
 

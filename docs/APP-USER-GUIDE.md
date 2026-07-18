@@ -400,9 +400,9 @@ You do not need to check this tab every day when the app is working normally.
 
 - Timezone
 - Quality and novelty limits
-- X posts per day
+- Exact daily generation times
+- Number of daily X + LinkedIn draft packs
 - LinkedIn posts per week
-- First and last publishing hours
 - Project and content-type cooldowns
 - Topics and writing styles
 - AI model settings
@@ -411,7 +411,7 @@ You do not need to check this tab every day when the app is working normally.
 
 **How to use it:**
 
-Set your timezone and realistic publishing frequency first. Keep quality and novelty limits high enough to block weak content.
+Set your timezone and exact daily generation times first. The default schedule creates five draft packs at 06:30, 12:30, 16:30, 19:30, and 21:30 in your timezone. Keep quality and novelty limits high enough to block weak content. A cooldown value of `0` disables that cooldown.
 
 Review your topics, writing style, product mix, and visual brand. Save your changes before leaving the page.
 
@@ -434,7 +434,7 @@ Avoid changing several strategy settings at the same time. If results change, yo
 2. Create the **Weekly review**.
 3. Approve or reject the three suggested decisions.
 4. Create the **Execution plan** for the next seven days.
-5. Check **Projects** for new facts and **Operations** for any system problems.
+5. Check **Projects** for facts discovered by the four-hour repository sync, approve only evidence you trust, and check **Operations** for any system problems.
 
 ## Common post statuses
 
@@ -447,4 +447,3 @@ Avoid changing several strategy settings at the same time. If results change, yo
 - **Skipped:** DevPulse intentionally did not use the idea or window.
 - **Rejected:** You decided not to use the post.
 - **Failed:** A technical step did not finish successfully.
-

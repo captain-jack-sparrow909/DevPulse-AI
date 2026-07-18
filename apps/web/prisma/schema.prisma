@@ -99,18 +99,19 @@ model UserSettings {
   userId                   String  @unique
   user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   timezone                 String  @default("Asia/Dubai")
-  postsPerDay              Int     @default(2) // legacy/fallback cadence when adaptive mode is off
+  postsPerDay              Int     @default(5) // legacy/fallback cadence when adaptive mode is off
   qualityThreshold         Float   @default(8.0)
-  firstPostHour            Int     @default(8)
-  lastPostHour             Int     @default(18)
+  firstPostHour            Int     @default(6)
+  lastPostHour             Int     @default(21)
+  dailyPostTimesJson       String  @default("[\"06:30\",\"12:30\",\"16:30\",\"19:30\",\"21:30\"]")
   defaultPlatforms         String  @default("x,linkedin") // comma-separated
   autoGenerate             Boolean @default(false)
   adaptiveCadenceEnabled   Boolean @default(true)
-  xPostsPerDay             Int     @default(2)
+  xPostsPerDay             Int     @default(5)
   linkedInPostsPerWeek     Int     @default(4)
   minimumNovelty           Float   @default(7.0)
-  projectCooldownHours     Int     @default(36)
-  contentTypeCooldownHours Int     @default(24)
+  projectCooldownHours     Int     @default(0)
+  contentTypeCooldownHours Int     @default(0)
 }
 
 /// Audience positioning, editorial pillars, owned projects, and target content mix.
@@ -208,7 +209,7 @@ model RepositoryChange {
   repositoryId      String
   repository        OwnedRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   externalId        String
-  kind              String // commit | pull_request | release
+  kind              String // commit | pull_request | release | documentation
   title             String
   summary           String?
   url               String

@@ -1,4 +1,4 @@
-export type RepositoryChangeKind = "commit" | "pull_request" | "release";
+export type RepositoryChangeKind = "commit" | "pull_request" | "release" | "documentation";
 
 export interface RepositoryChangeCandidate {
   externalId: string;
@@ -12,6 +12,12 @@ export interface RepositoryChangeCandidate {
   additions?: number;
   deletions?: number;
   raw?: unknown;
+  documentedFact?: {
+    title: string;
+    claim: string;
+    confidence: number;
+    evidence: Record<string, unknown>;
+  };
 }
 
 export interface SignificanceAssessment {
@@ -66,6 +72,7 @@ const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|swift|sql|prisma|graphq
 export function assessRepositoryChange(
   change: RepositoryChangeCandidate,
 ): SignificanceAssessment {
+  if (change.kind === "documentation") return { score: 90, meaningful: true };
   if (change.kind === "release") return { score: 95, meaningful: true };
 
   const text = `${change.title} ${change.summary ?? ""}`.toLowerCase();
@@ -94,6 +101,20 @@ export function assessRepositoryChange(
 }
 
 export function buildProjectFact(change: RepositoryChangeCandidate) {
+  if (change.documentedFact) {
+    return {
+      title: change.documentedFact.title,
+      claim: change.documentedFact.claim,
+      confidence: change.documentedFact.confidence,
+      evidence: {
+        kind: change.kind,
+        externalId: change.externalId,
+        url: change.url,
+        occurredAt: change.occurredAt.toISOString(),
+        ...change.documentedFact.evidence,
+      },
+    };
+  }
   const changedFiles = change.changedFiles.slice(0, 8);
   const fileEvidence = changedFiles.length
     ? ` Changed files include ${changedFiles.join(", ")}.`

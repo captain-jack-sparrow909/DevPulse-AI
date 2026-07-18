@@ -16,6 +16,7 @@ interface RepositoryView {
   active: boolean;
   syncStatus: string;
   lastSyncedAt: string | null;
+  isStale: boolean;
   lastError: string | null;
   changeCount: number;
   factCount: number;
@@ -86,11 +87,11 @@ export function ProjectIntelligence({
     setMessage("");
     try {
       const response = await fetch(url, init);
-      const data = (await response.json()) as { error?: string; totals?: { factsCreated: number; ignoredChanges: number; failures: number } };
+      const data = (await response.json()) as { error?: string; totals?: { factsCreated: number; documentationFacts?: number; ignoredChanges: number; failures: number } };
       if (!response.ok) throw new Error(data.error || "Request failed");
       if (data.totals) {
         setMessage(
-          `Sync complete: ${data.totals.factsCreated} new fact${data.totals.factsCreated === 1 ? "" : "s"}, ${data.totals.ignoredChanges} routine change${data.totals.ignoredChanges === 1 ? "" : "s"} ignored${data.totals.failures ? `, ${data.totals.failures} failed` : ""}.`,
+          `Sync complete: ${data.totals.factsCreated} new fact${data.totals.factsCreated === 1 ? "" : "s"}${data.totals.documentationFacts ? ` (${data.totals.documentationFacts} from current docs)` : ""}, ${data.totals.ignoredChanges} routine change${data.totals.ignoredChanges === 1 ? "" : "s"} ignored${data.totals.failures ? `, ${data.totals.failures} failed` : ""}.`,
         );
       }
       router.refresh();
@@ -160,7 +161,7 @@ export function ProjectIntelligence({
         <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle>Owned repositories</CardTitle>
-            <CardDescription>Read-only GitHub sync. A token is optional for public repos but recommended for a higher API limit.</CardDescription>
+            <CardDescription>Read-only GitHub sync refreshes automatically every 3–4 hours through idle cron ticks and inspects current README, docs, and product-definition evidence. A token is optional for public repos but recommended for a higher API limit.</CardDescription>
           </div>
           <Button onClick={() => sync()} disabled={Boolean(busy)}>
             {busy === "sync:all" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -179,7 +180,10 @@ export function ProjectIntelligence({
                       {repository.fullName}<ExternalLink className="h-3 w-3 shrink-0" />
                     </a>
                   </div>
-                  <Badge className={statusClass(repository.syncStatus)}>{repository.syncStatus.replaceAll("_", " ")}</Badge>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge className={statusClass(repository.syncStatus)}>{repository.syncStatus.replaceAll("_", " ")}</Badge>
+                    {repository.isStale && <Badge className="border-amber-400/20 bg-amber-400/10 text-amber-200">stale knowledge</Badge>}
+                  </div>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-zinc-400">
                   <span>{repository.changeCount} changes</span><span>{repository.factCount} facts</span>

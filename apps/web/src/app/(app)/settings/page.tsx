@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { SettingsForm } from "@/components/settings-form";
 import { getContentStrategy } from "@/lib/content/strategy-store";
 import { getBrandSettings } from "@/lib/visuals/brand";
+import { parseDailyPostTimesJson } from "@/lib/schedule/slots";
 
 export default async function SettingsPage() {
   const session = await requireUser();
@@ -44,6 +45,7 @@ export default async function SettingsPage() {
           minimumNovelty: settings.minimumNovelty,
           projectCooldownHours: settings.projectCooldownHours,
           contentTypeCooldownHours: settings.contentTypeCooldownHours,
+          dailyPostTimes: parseDailyPostTimesJson(settings.dailyPostTimesJson),
         }}
         topics={topics}
         styles={styles}

@@ -13,7 +13,7 @@ Phase 14 converts the latest persisted weekly growth review into a seven-day ope
 7. Review the resulting normal post draft and publish it manually.
 8. Confirm publication, capture the valid 24-hour checkpoint, then mark the anchor measured or skip it explicitly.
 
-The other daily slots retain the configured content strategy. Phase 14 adds one anchor per day; it does not replace the 12-slot cadence.
+The other daily slots retain the configured content strategy. Phase 14 adds one anchor per day; it does not replace the configured five-slot cadence.
 
 ## State model
 

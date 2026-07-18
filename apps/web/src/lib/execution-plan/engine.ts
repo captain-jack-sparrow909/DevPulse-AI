@@ -86,6 +86,7 @@ export function buildExecutionPlan(input: {
   firstPostHour: number;
   lastPostHour: number;
   postsPerDay: number;
+  dailyPostTimes?: string[];
   strategy: ContentStrategyConfig;
   reviewId: string;
   reviewStatus: string;
@@ -96,12 +97,20 @@ export function buildExecutionPlan(input: {
   activeCampaigns: ExecutionCampaignInput[];
 }): ExecutionPlanDraft {
   const sourceDecisionIds = input.decisions.filter((decision) => decision.status === "applied").map((decision) => decision.id);
-  const slots = anchorSlots(input.postsPerDay);
+  const postsPerDay = input.dailyPostTimes?.length || input.postsPerDay;
+  const slots = anchorSlots(postsPerDay);
   const items: ExecutionPlanItemDraft[] = [];
 
   for (let day = 0; day < 7; day += 1) {
     const dayDate = localAddDays(input.startDate, day, input.timezone);
-    const dailySlots = computeDailySlots(dayDate, input.timezone, input.firstPostHour, input.lastPostHour, input.postsPerDay);
+    const dailySlots = computeDailySlots(
+      dayDate,
+      input.timezone,
+      input.firstPostHour,
+      input.lastPostHour,
+      postsPerDay,
+      input.dailyPostTimes,
+    );
     const slotIndex = slots[day % slots.length] ?? 0;
     const content = contentTypeForSlot(day, input.strategy.contentMix);
     const project = content.type === "curated_discovery"

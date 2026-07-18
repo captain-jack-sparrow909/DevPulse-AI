@@ -140,9 +140,17 @@ export const DEFAULT_CONTENT_STRATEGY: ContentStrategyConfig = {
       repository: "captain-jack-sparrow909/rontgenai",
       url: "https://github.com/captain-jack-sparrow909/rontgenai",
       description:
-        "Multi-product AI suite for engineers covering architecture review, spreadsheet and SQL chat, repository explanation, PR review, issue-to-PR automation, and production incident RCA.",
+        "Multi-product AI engineering suite spanning architecture, repository intelligence, CI optimization, security review, issue automation, migrations, DevOps, cloud costs, data analysis, and incident RCA.",
       keywords: [
         "architecture review",
+        "build pipeline optimizer",
+        "bug reproduction",
+        "architecture diagram",
+        "migration planner",
+        "open source issue finder",
+        "devops assistant",
+        "cloud cost optimizer",
+        "security review",
         "sql",
         "repository explainer",
         "pull request review",
@@ -232,6 +240,8 @@ interface VerifiedProjectFactCard {
   id: string;
   label: string;
   facts: string[];
+  /** Explicitly confirmed by the creator; not merely a stale fallback. */
+  userVerified?: boolean;
 }
 
 const VERIFIED_PROJECT_FACT_CARDS: Record<string, VerifiedProjectFactCard[]> = {
@@ -265,11 +275,68 @@ const VERIFIED_PROJECT_FACT_CARDS: Record<string, VerifiedProjectFactCard[]> = {
   "rontgen-ai": [
     {
       id: "product-map",
-      label: "six-product engineering workflow map",
+      label: "seven-product engineering workflow map",
       facts: [
-        "The repository describes six engineering products: Blueprint, Pulse, Atlas, Sentinel, Forge, and Radar.",
-        "The products cover architecture review, spreadsheet and SQL chat, repository explanation, PR review, issue-to-PR automation, and incident root-cause analysis.",
+        "The repository describes seven engineering products: Blueprint, Pulse, Atlas, Sentinel, Forge, Radar, and Relay.",
+        "The suite covers architecture and security review, spreadsheet and SQL chat, repository explanation, PR review, issue workflows, incident analysis, and CI pipeline optimization.",
       ],
+    },
+    {
+      id: "relay-build-pipeline",
+      label: "Relay build pipeline optimizer",
+      userVerified: true,
+      facts: [
+        "Relay includes a build pipeline optimizer that accepts uploaded or pasted CI evidence.",
+        "Automatic GitHub and GitLab CI evidence ingestion remains future integration work; it is not described as included yet.",
+      ],
+    },
+    {
+      id: "forge-bug-reproduction",
+      label: "Forge bug reproduction assistant",
+      userVerified: true,
+      facts: ["Forge includes a bug reproduction assistant."],
+    },
+    {
+      id: "atlas-blueprint-diagrams",
+      label: "Atlas to Blueprint architecture diagrams",
+      userVerified: true,
+      facts: ["The architecture diagram generator is included and flows from Atlas to Blueprint."],
+    },
+    {
+      id: "atlas-migration-planner",
+      label: "Atlas migration planner",
+      userVerified: true,
+      facts: ["Atlas includes a migration planner."],
+    },
+    {
+      id: "forge-open-source-issues",
+      label: "Forge open-source issue finder",
+      userVerified: true,
+      facts: ["Forge includes an open-source issue finder."],
+    },
+    {
+      id: "radar-devops-assistant",
+      label: "Radar DevOps assistant",
+      userVerified: true,
+      facts: [
+        "Radar includes a DevOps assistant.",
+        "Direct deployment and monitoring integrations remain future integration work; they are not described as included yet.",
+      ],
+    },
+    {
+      id: "blueprint-cloud-cost",
+      label: "Blueprint cloud cost optimizer",
+      userVerified: true,
+      facts: [
+        "Blueprint includes a cloud cost optimizer that works with uploaded inventory or billing evidence.",
+        "Direct AWS, Azure, and GCP connections remain future integration work; they are not described as included yet.",
+      ],
+    },
+    {
+      id: "sentinel-blueprint-security",
+      label: "Sentinel and Blueprint security review",
+      userVerified: true,
+      facts: ["The security review assistant is included across Sentinel and Blueprint."],
     },
   ],
   intellitab: [
@@ -547,6 +614,7 @@ export function projectSources(strategy: ContentStrategyConfig): RawSourceItem[]
         ownedProject: true,
         factCard: card.id,
         verifiedFacts: card.facts,
+        userVerified: card.userVerified === true,
       },
     }));
   });

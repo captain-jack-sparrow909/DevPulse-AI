@@ -17,6 +17,8 @@ import { ANGLES } from "@/lib/ai/prompts";
 import { scoreDualDraft } from "@/lib/ai/scoring";
 import {
   buildSlotPlan,
+  contentRotationIndex,
+  dailyPostTimesFromSettings,
   dayBoundsUtc,
   formatSlotDateTime,
   listStaleMissedDueSlots,
@@ -45,7 +47,11 @@ import {
   orderCandidatesForStrategy,
   type ContentType,
 } from "@/lib/content/strategy";
-import { markProjectFactUsed, projectSourcesForUser } from "@/lib/projects/fact-sources";
+import {
+  markProjectFactUsed,
+  projectSourcesForUser,
+  staleProjectKnowledgeWarnings,
+} from "@/lib/projects/fact-sources";
 import {
   buildEngagementPrompt,
   engagementBriefForSlot,
@@ -174,6 +180,7 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
     settings.firstPostHour,
     settings.lastPostHour,
     effectivePostsPerDay(settings),
+    dailyPostTimesFromSettings(settings),
   );
   const { start, end } = dayBoundsUtc(now, settings.timezone);
 
@@ -208,7 +215,15 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
     if (meta && meta.generationJobId === openJob.id) {
       const contentType =
         meta.contentType ??
-        contentTypeForSlot(meta.slotIndex, strategy.contentMix).type;
+        contentTypeForSlot(
+          contentRotationIndex(
+            new Date(meta.scheduledFor),
+            settings.timezone,
+            meta.slotIndex,
+            plan.postsPerDay,
+          ),
+          strategy.contentMix,
+        ).type;
       const normalizedMeta: PhasedJobMeta = {
         ...meta,
         contentType,
@@ -278,10 +293,12 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
     data: { userId, status: "running" },
   });
 
-  const ownedProjectSources = await persistSources(
-    researchRun.id,
-    await projectSourcesForUser(userId, strategy),
-  );
+  const [projectSources, freshnessWarnings] = await Promise.all([
+    projectSourcesForUser(userId, strategy),
+    staleProjectKnowledgeWarnings(userId),
+  ]);
+  for (const warning of freshnessWarnings) log(logs, `Project knowledge warning: ${warning}`);
+  const ownedProjectSources = await persistSources(researchRun.id, projectSources);
 
   const job = await prisma.generationJob.create({
     data: {
@@ -294,7 +311,13 @@ export async function runOneGenerationPhase(userId: string): Promise<PhaseResult
     },
   });
 
-  const contentType = executionContentItem(executionDirective, strategy, pick.slotIndex).type;
+  const rotationIndex = contentRotationIndex(
+    pick.scheduledFor,
+    settings.timezone,
+    pick.slotIndex,
+    plan.postsPerDay,
+  );
+  const contentType = executionContentItem(executionDirective, strategy, rotationIndex).type;
   const meta: PhasedJobMeta = {
     kind: "phased_v1",
     slotIndex: pick.slotIndex,
@@ -336,7 +359,15 @@ async function runResearchChunkPhase(
   const strategy = settings.contentStrategy;
   const contentType =
     meta.contentType ??
-    contentTypeForSlot(meta.slotIndex, strategy.contentMix).type;
+    contentTypeForSlot(
+      contentRotationIndex(
+        new Date(meta.scheduledFor),
+        settings.timezone,
+        meta.slotIndex,
+        dailyPostTimesFromSettings(settings).length || effectivePostsPerDay(settings),
+      ),
+      strategy.contentMix,
+    ).type;
   const researchPlan = researchChunksForContentType(contentType);
 
   if (chunkIndex >= researchPlan.length) {
@@ -452,6 +483,7 @@ async function runWritePhase(
     settings.firstPostHour,
     settings.lastPostHour,
     effectivePostsPerDay(settings),
+    dailyPostTimesFromSettings(settings),
   );
 
   const slotIndex = meta.slotIndex;

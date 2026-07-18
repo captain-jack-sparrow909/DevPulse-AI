@@ -6,6 +6,7 @@ import { slugify } from "@/lib/utils";
 import { getContentStrategy, saveContentStrategy } from "@/lib/content/strategy-store";
 import type { ContentStrategyConfig } from "@/lib/content/strategy";
 import { DEFAULT_BRAND, getBrandSettings, safeHex } from "@/lib/visuals/brand";
+import { normalizeDailyPostTimes } from "@/lib/schedule/slots";
 
 async function getUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -50,6 +51,7 @@ export async function PATCH(request: Request) {
       minimumNovelty?: number;
       projectCooldownHours?: number;
       contentTypeCooldownHours?: number;
+      dailyPostTimes?: string[];
     };
     topic?: { id?: string; name: string; keywords?: string; active?: boolean; delete?: boolean };
     style?: {
@@ -80,6 +82,20 @@ export async function PATCH(request: Request) {
 
   if (body.settings) {
     const input = body.settings;
+    const dailyPostTimes = Array.isArray(input.dailyPostTimes)
+      ? normalizeDailyPostTimes(input.dailyPostTimes)
+      : null;
+    if (
+      dailyPostTimes &&
+      (dailyPostTimes.length < 1 ||
+        dailyPostTimes.length > 12 ||
+        dailyPostTimes.length !== input.dailyPostTimes!.length)
+    ) {
+      return NextResponse.json(
+        { error: "Daily post times must contain 1–12 unique times in HH:mm format." },
+        { status: 400 },
+      );
+    }
     const bounded = (value: number | undefined, min: number, max: number) =>
       typeof value === "number" && Number.isFinite(value)
         ? Math.min(max, Math.max(min, value))
@@ -97,8 +113,8 @@ export async function PATCH(request: Request) {
       ...(bounded(input.postsPerDay, 1, 12) != null
         ? { postsPerDay: Math.round(bounded(input.postsPerDay, 1, 12)!) }
         : {}),
-      ...(bounded(input.xPostsPerDay, 1, 4) != null
-        ? { xPostsPerDay: Math.round(bounded(input.xPostsPerDay, 1, 4)!) }
+      ...(bounded(input.xPostsPerDay, 1, 12) != null
+        ? { xPostsPerDay: Math.round(bounded(input.xPostsPerDay, 1, 12)!) }
         : {}),
       ...(bounded(input.linkedInPostsPerWeek, 1, 7) != null
         ? { linkedInPostsPerWeek: Math.round(bounded(input.linkedInPostsPerWeek, 1, 7)!) }
@@ -123,6 +139,15 @@ export async function PATCH(request: Request) {
             contentTypeCooldownHours: Math.round(
               bounded(input.contentTypeCooldownHours, 0, 168)!,
             ),
+          }
+        : {}),
+      ...(dailyPostTimes
+        ? {
+            dailyPostTimesJson: JSON.stringify(dailyPostTimes),
+            postsPerDay: dailyPostTimes.length,
+            xPostsPerDay: dailyPostTimes.length,
+            firstPostHour: Number(dailyPostTimes[0]!.slice(0, 2)),
+            lastPostHour: Number(dailyPostTimes[dailyPostTimes.length - 1]!.slice(0, 2)),
           }
         : {}),
     };
